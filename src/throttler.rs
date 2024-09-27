@@ -1,76 +1,77 @@
 use std::ops::Sub;
 use crate::packet::{Packet, SentPacket};
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread;
-use std::thread::{JoinHandle};
+use std::sync::mpsc::{Receiver};
 use std::time::{Duration, Instant};
 use crate::r#const::{INITIAL_SPEED};
+use crate::throttler::ThrottlerResult::{DirectPacket, NoData, ThrottledPacket, Throttling};
+
 const ANALYZE_PERIOD_MS: usize = 100;
 
 pub struct Throttler {
-    pub join_handle: JoinHandle<()>,
+    queue: Vec<Packet>,
+    //получение пакетов от OpenVPN сервера в сторону клиента
+    receiver: Receiver<ThrottlerCommand>,
+    analyzer: Analyzer
 }
+
 
 pub enum ThrottlerCommand {
     Enqueue(Packet),
-    Dispose,
+    //ChangeSpeed
+    _Dispose,
+}
+
+pub enum ThrottlerResult {
+    NoData,
+    DirectPacket(Packet),
+    ThrottledPacket(Packet),
+    Throttling
 }
 
 impl Throttler {
-    pub fn new(receiver: Receiver<ThrottlerCommand>, transmitter: Sender<Packet>) -> Throttler {
-        let join_handle = thread::Builder::new()
-            .name("Throttler".to_string())
-            .spawn(move || {
-            Self::worker(receiver, transmitter);
-        }).expect("Создан поток дросселя");
-        Self { join_handle }
+    pub fn new(receiver: Receiver<ThrottlerCommand>) -> Throttler {
+        let queue: Vec<Packet> = vec![];
+        let analyzer = Analyzer::new(INITIAL_SPEED);
+        Self { queue, receiver, analyzer }
     }
-    /**
-    //queue: Queue<Packet>,
-    //получение пакетов от OpenVPN сервера в сторону клиента
-    //receiver: Receiver<Packet>,
-    //передача дросселированных пакетов через эту абстракцию
-    //transmitter: Sender<Packet>,
-     */
-    fn worker(receiver: Receiver<ThrottlerCommand>, transmitter: Sender<Packet>) {
-        let mut queue: Vec<Packet> = vec![];
-        let await_time = Duration::from_millis(5);
-        let mut analyzer = Analyzer::new(INITIAL_SPEED);
-        loop {
-            //TODO: подсчитать время когда освободится пространство под пакет (если таковой есть на отправку)
-            let command = receiver.recv_timeout(await_time);
-            if command.is_ok() {
-                match command.unwrap() {
-                    ThrottlerCommand::Enqueue(packet) => {
-                        //Не помещаем во внутреннюю очередь если очередь пустая
-                        if queue.is_empty() && packet.size <= analyzer.get_available_space() {
-                            analyzer.data_was_sent(packet.size);
-                            transmitter.send(packet).expect("Отправка пакета сразу");
-                            continue;
-                        } else {
-                            queue.push(packet);
-                        }
-                    },
-                    ThrottlerCommand::Dispose => {
-                        return;
-                    }
-                }
-            }
-            //Вычитываем все из внутренней очереди
-            while !queue.is_empty() {
-                //ждем пока пявится пространство
-                if let Some(pack) = queue.first() {
-                    if analyzer.get_available_space() >= pack.size {
-                        let first = queue.remove(0);
-                        analyzer.data_was_sent(first.size);
-                        transmitter.send(first).expect("Отправка пакета из очереди");
-                    } else {
-                        break;
-                    }
+
+    pub fn get_packet(&mut self) -> ThrottlerResult {
+
+        let available_space = self.analyzer.get_available_space();
+        //Вычитываем все из внутренней очереди
+        if !self.queue.is_empty() {
+            //ждем пока пявится пространство
+            if let Some(pack) = self.queue.first() {
+                if available_space >= pack.size {
+                    let first = self.queue.remove(0);
+                    self.analyzer.data_was_sent(first.size);
+                    return ThrottledPacket(first)
+                }else{
+                    return Throttling
                 }
             }
         }
+        //очередь пустая или там нет нужного размера пакета
+        if let Ok(command) = self.receiver.try_recv() {
+            match command {
+                ThrottlerCommand::Enqueue(packet) => {
+                    //Не помещаем во внутреннюю очередь если очередь пустая
+                    if self.queue.is_empty() && packet.size <= available_space {
+                        self.analyzer.data_was_sent(packet.size);
+                        return DirectPacket(packet);
+                    } else {
+                        self.queue.push(packet);
+                        return Throttling
+                    }
+                },
+                ThrottlerCommand::_Dispose => {
+                    self.queue.clear();
+                }
+            }
+        }
+        NoData
     }
+
 }
 
 
@@ -155,9 +156,7 @@ mod tests {
     fn all_packets_received_test() {
         //канал в дроссель
         let (tx, rx_throttler) = channel();
-        //дросселированные данные
-        let (tx_throttler, rx) = channel();
-        let throttler = Throttler::new(rx_throttler, tx_throttler);
+        let mut throttler = Throttler::new(rx_throttler);
 
         //суем столько пакетов, чтобы за раз не были отправлены все
         //по дефолту скорость 1КБ/1мc
@@ -168,19 +167,26 @@ mod tests {
         }
 
         let mut received: usize = 0;
-        while rx.recv_timeout(Duration::from_millis(1)).is_ok() {
-            received += 1;
+        loop{
+            match throttler.get_packet()  {
+                DirectPacket(_) => {received+=1;}
+                ThrottledPacket(_) => {received+=1;}
+                _ => {break;}
+            }
         }
         //Не должны получить все сразу
         assert!(received<105);
         sleep(Duration::from_millis(100));
         //Дополучаем остатки
-        while rx.recv_timeout(Duration::from_millis(10)).is_ok() {
-            received += 1;
+        loop{
+            match throttler.get_packet()  {
+                DirectPacket(_) => {received+=1;}
+                ThrottledPacket(_) => {received+=1;}
+                _ => {break;}
+            }
         }
         //команда на завершение потока
-        tx.send(ThrottlerCommand::Dispose).expect("Отправка команды на завершение работы");
-        throttler.join_handle.join().unwrap();
+        tx.send(ThrottlerCommand::_Dispose).expect("Отправка команды на завершение работы");
         assert_eq!(110, received)
     }
 }
