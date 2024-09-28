@@ -1,10 +1,13 @@
 use std::{env, thread};
 use std::io::Write;
+use std::ops::Sub;
 use std::sync::mpsc::{channel};
+use std::time::{Duration, Instant};
 use log::LevelFilter;
 use simplelog::{Config, SimpleLogger};
 use crate::entry_point::listen;
 use crate::filler::CollectedInfo;
+use crate::packet::SentPacket;
 
 mod throttler;
 mod packet;
@@ -47,26 +50,55 @@ done
     let (ct_stat, cr_stat) = channel::<CollectedInfo>();
     thread::spawn(move || {
         let pbstr = " ".repeat(20).to_string();
-        while let Ok(stat) = cr_stat.recv() {
-            let mut data_size: usize = 0;
-            let mut filler_size: usize = 0;
+        let mut data : Vec<SentPacket> = vec![];
+        let mut filler : Vec<SentPacket> = vec![];
+        let half_secs = Duration::from_millis(500);
 
+        while let Ok(stat) = cr_stat.recv() {
             for i in 0..stat.data_count {
-                data_size += stat.data_packets[i].unwrap().sent_size;
+                data.push(stat.data_packets[i].unwrap());
             }
             for i in 0..stat.filler_count {
-                filler_size += stat.filler_packets[i].unwrap().sent_size;
+                filler.push(stat.filler_packets[i].unwrap());
+            }
+            let old_packets = Instant::now().sub(half_secs);
+            while let Some(first) = data.first() {
+                if first.sent_date<old_packets{
+                    data.remove(0);
+                }else{
+                    break;
+                }
+            }
+            while let Some(first) = filler.first() {
+                if first.sent_date<old_packets{
+                    filler.remove(0);
+                }else{
+                    break;
+                }
             }
 
-            let total_size = filler_size + data_size;
+            let data_bytes: usize = data.iter()
+                .map(|sp| { sp.sent_size })
+                .reduce(|acc_size: usize, size| {
+                    acc_size + size
+            }).unwrap_or_else(|| {0});
+            let filler_bytes: usize = filler.iter()
+                .map(|sp| { sp.sent_size })
+                .reduce(|acc_size: usize, size| {
+                    acc_size + size
+                }).unwrap_or_else(|| {0});
+
+
+
+            let total_size = data_bytes + filler_bytes;
             if total_size==0{
                 continue;
             }
-            let percent_data = data_size * 100 / total_size;
-            let percent_filler = filler_size * 100 / total_size;
+            let percent_data = data_bytes * 100 / total_size;
+            let percent_filler = filler_bytes * 100 / total_size;
             let avg_data_size: usize = match stat.data_count {
                 0 => 0,
-                _ => data_size / stat.data_count
+                _ => data_bytes / data.len()
             };
             print!("\r {}%/{}% \tavg data size {}{}", percent_data, percent_filler, avg_data_size, &pbstr);
             std::io::stdout().flush().unwrap();
