@@ -307,7 +307,7 @@ mod tests {
         });
 
 
-        let receive_time = Duration::from_millis(1400);
+        let receive_time = Duration::from_millis(1150);
         let start = Instant::now();
         trace!("Начали ожидание");
         let mut data_offset = 0;
@@ -328,6 +328,6 @@ mod tests {
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         join_handle.join().unwrap();
         assert!(data_offset >= 1_000_000);
-        assert!(filler_offset > 30_000 && filler_offset < 100_000);
+        assert!(filler_offset > 50_000 && filler_offset < 120_000);
     }
 }
