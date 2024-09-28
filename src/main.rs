@@ -96,11 +96,11 @@ done
             }
             let percent_data = data_bytes * 100 / total_size;
             let percent_filler = filler_bytes * 100 / total_size;
-            let avg_data_size: usize = match stat.data_count {
+            let avg_data_size: usize = match data.len() {
                 0 => 0,
                 _ => data_bytes / data.len()
             };
-            print!("\r {}%/{}% \tavg data size {}{}", percent_data, percent_filler, avg_data_size, &pbstr);
+            print!("\r\t\t\t {:03}%/{:03}% \tavg data size {}{}", percent_data, percent_filler, avg_data_size, &pbstr);
             std::io::stdout().flush().unwrap();
         }
     });
