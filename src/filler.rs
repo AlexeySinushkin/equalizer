@@ -6,14 +6,14 @@
 */
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use crate::packet::{Packet, SentPacket};
-use crate::r#const::{ONE_PACKET_MAX_SIZE};
+use crate::objects::{CollectedInfo, Packet, SentPacket};
+use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
 const ANALYZE_PERIOD_MS: u64 = 100;
 const PREDICT_MS: usize = 10;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
 const ALMOST_OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS - PREDICT_MS as u64);
-const MAX_STAT_COUNT: usize = 100;
+
 
 enum PacketType {
     Data,
@@ -53,29 +53,14 @@ pub struct Filler {
     speed: usize,
 }
 
-
-pub struct CollectedInfo {
-    pub data_packets: [Option<SentPacket>; MAX_STAT_COUNT],
-    pub data_count: usize,
-    pub filler_packets: [Option<SentPacket>; MAX_STAT_COUNT],
-    pub filler_count: usize,
-}
-
-impl Default for CollectedInfo {
-    fn default() -> CollectedInfo {
-        CollectedInfo {
-            data_count: 0,
-            filler_count: 0,
-            data_packets: [None; MAX_STAT_COUNT],
-            filler_packets: [None; MAX_STAT_COUNT],
-        }
-    }
-}
-
 impl Filler {
     pub fn new(speed: usize) -> Filler {
         let queue: Vec<SentPacketType> = Vec::new();
         Self { queue, speed }
+    }
+
+    pub fn set_speed(&mut self, speed: usize){
+        self.speed = speed;
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
@@ -173,7 +158,7 @@ mod tests {
     use std::ops::Sub;
     use std::thread::sleep;
     use std::time::{Duration, Instant};
-    use log::{info};
+    use log::info;
     use crate::filler::{Filler, OLD_AGE};
     use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
     use crate::tests::test_init::initialize_logger;

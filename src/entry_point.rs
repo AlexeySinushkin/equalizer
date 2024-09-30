@@ -1,10 +1,10 @@
 use std::{io, thread};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 use log::{error, info};
-use crate::filler::CollectedInfo;
-use crate::vpn_proxy::VpnProxy;
+use crate::objects::{CollectedInfo, RuntimeCommand};
+use crate::vpn_proxy::{VpnProxy};
 
 
 /*

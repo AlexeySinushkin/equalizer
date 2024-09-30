@@ -1,13 +1,15 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
-use crate::throttler::{ThrottlerAnalyzer};
+use crate::throttler::ThrottlerAnalyzer;
 use log::{info, trace};
-use crate::filler::{CollectedInfo, Filler};
+use crate::filler::Filler;
+use crate::objects::CollectedInfo;
 use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
+
 const A_FEW_SPACE : usize = 100;
 
 pub struct VpnProxy {
@@ -18,6 +20,7 @@ pub struct VpnProxy {
     pub join_handle: JoinHandle<()>,
     ct_filler: Sender<TcpStream>
 }
+
 
 
 impl VpnProxy {
@@ -101,6 +104,16 @@ impl VpnProxy {
                     }
                 }
                 ct_stat.send(filler.clean()).unwrap();
+                /*
+                if let Some(command) = cr_command.try_recv() {
+                    match command {
+                        SetSpeed(speed) => {
+                            throttler.set_speed(speed);
+                            filler.set_speed(speed)
+                        }
+                    }
+                }
+                */
             }
         }).expect("client_stream");
 
