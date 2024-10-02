@@ -29,7 +29,7 @@ fn main() {
         println!("Filler simple example");
         print!("
 On client side
-ssh -NT -L 11196:127.0.0.1:11196 11194:127.0.0.1:11194  vpn_server
+ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
 then establish vpn connection to 11194:127.0.0.1
 and filler connection to 11196:127.0.0.1
 (both inside one ssh session)
