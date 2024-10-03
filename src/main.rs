@@ -8,6 +8,7 @@ use simplelog::{Config, SimpleLogger};
 use crate::entry_point::listen;
 use objects::CollectedInfo;
 use crate::objects::SentPacket;
+use crate::orchestrator::Orchestrator;
 
 mod throttler;
 mod objects;
@@ -16,7 +17,7 @@ mod vpn_proxy;
 mod entry_point;
 mod filler;
 mod tests;
-mod instance_lifecycle;
+mod orchestrator;
 
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
@@ -104,5 +105,8 @@ done
             std::io::stdout().flush().unwrap();
         }
     });
-    listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_stat).unwrap();
+    let (ct_vpn, cr_vpn) = channel();
+    let (ct_filler, cr_filler) = channel();
+    let _orchestrator = Orchestrator::new(cr_vpn, cr_filler);
+    listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler).unwrap();
 }

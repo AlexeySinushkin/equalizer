@@ -4,89 +4,37 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 use log::{error, info};
 use crate::objects::{CollectedInfo, RuntimeCommand};
+use crate::orchestrator::Orchestrator;
 use crate::vpn_proxy::{VpnProxy};
 
 
-/*
-Этот билдер нужен потому, что мы не знаем кто подключится первым
-VPN или заполнитель
-Пока что работаем с одной парой
-Далее надо будет думать как каналы будут искать свою пару
- */
-pub struct InstanceBuilder {
-    pub vpn_channel: Option<VpnProxy>,
-    pub filler_channel: Option<TcpStream>,
-    attached: bool,
-}
 
-impl InstanceBuilder {
-    pub fn is_attached(&self) -> bool {
-        self.attached
-    }
-    pub fn attach(&mut self, filler_channel: TcpStream) {
-        if let Some(vpn_channel) = self.vpn_channel.take() {
-            vpn_channel.attach(filler_channel);
-            self.vpn_channel = Some(vpn_channel);
-            self.attached = true;
-        }
-    }
-}
-
-
-
-pub fn listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_stat: Sender<CollectedInfo>) -> std::thread::Result<()> {
-    let (ct_vpn, cr_vpn) = channel();
-    let (ct_filler, cr_filler) = channel();
-
+pub fn listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<VpnProxy>, ct_filler: Sender<TcpStream>) -> std::thread::Result<()> {
     let j1 = thread::spawn(move || {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
         // accept connections and process them serially
         for stream in listener.incoming() {
-            if let Ok(vpn_proxy) = handle_client(stream.unwrap(), vpn_server_port, ct_stat.clone()) {
-                ct_vpn.send(vpn_proxy).unwrap()
+            if let Ok(vpn_proxy) = handle_client(stream.unwrap(), vpn_server_port) {
+                ct_vpn.send(vpn_proxy).expect("VPN Channel works");
             }
         }
     });
 
-    thread::spawn(move || {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", filler_port)).expect("bind to client filler port");
-        // accept connections and process them serially
-        for stream in listener.incoming() {
-            ct_filler.send(stream.unwrap()).unwrap()
-        }
-    });
-
-    let mut instance = InstanceBuilder { vpn_channel: None, filler_channel: None, attached: false };
-    loop {
-        if let Ok(vpn_channel) = cr_vpn.recv_timeout(Duration::from_millis(100)) {
-            instance.vpn_channel = Some(vpn_channel);
-            if !instance.is_attached() {
-                if let Some(filler_channel) = instance.filler_channel.take() {
-                    instance.attach(filler_channel);
-                    info!("Filler stream was sent to VpnProxy (case1)");
-                    break;
-                }
-            }
-        }
-        if let Ok(filler_channel) = cr_filler.recv_timeout(Duration::from_millis(100)) {
-            if instance.vpn_channel.is_some() && !instance.is_attached() {
-                instance.attach(filler_channel);
-                info!("Filler stream was sent to VpnProxy (case2)");
-                break;
-            } else {
-                instance.filler_channel = Some(filler_channel)
-            }
-        }
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", filler_port)).expect("bind to client filler port");
+    // accept connections and process them serially
+    for stream in listener.incoming() {
+        ct_filler.send(stream.unwrap()).expect("Filler Channel works");
     }
+
     j1.join()
 }
 
-fn handle_client(client_stream: TcpStream, vpn_server_port: u16, ct_stat: Sender<CollectedInfo>) -> io::Result<VpnProxy> {
+fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<VpnProxy> {
     println!("Client connected. Theirs address {:?}", client_stream.peer_addr().unwrap());
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        return Ok(VpnProxy::new(client_stream, result.unwrap(), ct_stat));
+        return Ok(VpnProxy::new(client_stream, result.unwrap()));
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;

@@ -1,3 +1,5 @@
+use std::net::TcpStream;
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
@@ -42,6 +44,7 @@ impl Default for CollectedInfo {
 
 //команды в сторону прокси (управление)
 pub enum RuntimeCommand {
+    SetFiller(TcpStream),
     SetSpeed(usize)
 }
 
