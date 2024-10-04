@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::throttler::ThrottlerAnalyzer;
 use log::{info, trace};
 use crate::filler::Filler;
-use crate::objects::{CollectedInfo, ProxyState, RuntimeCommand};
+use crate::objects::{ProxyState, RuntimeCommand};
 use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
 
 const A_FEW_SPACE : usize = 100;
@@ -21,7 +21,7 @@ pub struct VpnProxy {
     pub ct_command: Sender<RuntimeCommand>,
     pub cr_state: Receiver<ProxyState>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
-    //бдуем использвоать IP tun интерфейса
+    //будем использовать IP tun интерфейса
     pub key: String
 }
 
@@ -33,6 +33,7 @@ impl VpnProxy {
     и поток внутри дросселя для отправки данных (лимитированных по скорости)
      */
     pub fn new(mut client_stream: TcpStream, mut up_stream: TcpStream) -> VpnProxy {
+        let key = VpnProxy::get_key(&client_stream);
         let (ct_command, cr_command) = channel();
         let (ct_state, cr_state) = channel();
 
@@ -67,10 +68,11 @@ impl VpnProxy {
                     match command {
                         RuntimeCommand::SetFiller(filler) => {
                             filler_stream = filler;
+                            trace!("Leaving simplified mode");
+                            break;
                         },
                         _=>{}
                     }
-                    break;
                 }
             }
             //цикл который использует заполнитель
@@ -129,7 +131,7 @@ impl VpnProxy {
             join_handle,
             ct_command,
             cr_state,
-            key: Self::get_key(&client_stream)
+            key
         }
     }
 

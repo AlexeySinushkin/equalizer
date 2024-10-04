@@ -1,5 +1,5 @@
 use std::net::TcpStream;
-use std::sync::mpsc::Sender;
+
 use std::time::Instant;
 use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
@@ -25,6 +25,7 @@ pub struct SentPacket {
 
 
 pub struct CollectedInfo {
+    pub target_speed: usize,
     pub data_packets: [Option<SentPacket>; MAX_STAT_COUNT],
     pub data_count: usize,
     pub filler_packets: [Option<SentPacket>; MAX_STAT_COUNT],
@@ -34,6 +35,7 @@ pub struct CollectedInfo {
 impl Default for CollectedInfo {
     fn default() -> CollectedInfo {
         CollectedInfo {
+            target_speed: 0,
             data_count: 0,
             filler_count: 0,
             data_packets: [None; MAX_STAT_COUNT],
