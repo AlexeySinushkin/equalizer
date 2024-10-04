@@ -280,6 +280,7 @@ mod tests {
             if start.elapsed()>receive_time {
                 break;
             }
+            orchestrator.invoke();
             trace!("Прошло {} мс", start.elapsed().as_millis());
         }
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);

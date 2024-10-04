@@ -1,6 +1,6 @@
 use std::{env, thread};
 use std::io::Write;
-use std::ops::Add;
+
 
 
 use std::sync::mpsc::{channel};
@@ -81,7 +81,7 @@ done
                         result.push_str(&stat_line);
                     }
                     print!("{}", result);
-                    for lines in 0..collected_info.len() {
+                    for _lines in 0..collected_info.len() {
                         print!("\033[1A")
                     }
                     std::io::stdout().flush().unwrap();

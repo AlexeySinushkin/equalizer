@@ -3,10 +3,10 @@
 //собирает статистику по ним и отправляет в анализатор изменения скорости
 
 use std::net::TcpStream;
-use std::ops::{Deref, DerefMut};
+use std::ops::{DerefMut};
 use std::sync::mpsc::{Receiver};
 use log::info;
-use crate::objects::{CollectedInfo, ProxyState, RuntimeCommand};
+use crate::objects::{ProxyState, RuntimeCommand};
 use crate::statistic::{StatisticCollector, NoStatistic, ClientInfo};
 use crate::vpn_proxy::VpnProxy;
 
@@ -53,9 +53,9 @@ impl Orchestrator {
 
     fn receive_proxy_state(&mut self) {
         for i in 0..self.pairs.len() {
-            let mut proxy = &self.pairs[i];
+            let proxy = &self.pairs[i];
             if let Ok(state) = proxy.cr_state.try_recv() {
-                let mut stat = self.stat.deref_mut();
+                let stat = self.stat.deref_mut();
                 match state {
                     ProxyState::SetupComplete => {
                         info!("SetupComplete {}", &proxy.key);

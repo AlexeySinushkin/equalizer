@@ -76,7 +76,7 @@ impl CurrentRollingInfo {
 
 impl StatisticCollector for SimpleStatisticCollector {
     fn append_info(&mut self, key: &String, stat: CollectedInfo) {
-        let mut instance = self.get_or_create(key);
+        let instance = self.get_or_create(key);
         for i in 0..stat.data_count {
             instance.data.push(stat.data_packets[i].unwrap());
         }

@@ -133,24 +133,6 @@ impl Filler {
         None
     }
 
-    /*
-    Подсчитываем какого должен быть размера пакет и создаем
-    U = n/t
-    n = U*t
-     */
-    fn create_filler(&self, from: Instant) -> Option<Packet> {
-        //скорость в дальнейшем может меняться - считаем каждый раз
-        let gap = Instant::now().duration_since(from);
-        let mut n = (self.speed as usize) * (gap.as_millis() as usize);
-        if n == 0 {
-            return None;
-        }
-        if n > ONE_PACKET_MAX_SIZE {
-            n = ONE_PACKET_MAX_SIZE;
-        }
-        //else TODO увеличить размер проанализировав отправленные данные за последние 100мс
-        Some(Packet::new_packet(n))
-    }
 }
 
 #[cfg(test)]
@@ -163,15 +145,6 @@ mod tests {
     use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
     use crate::tests::test_init::initialize_logger;
 
-    #[test]
-    fn create_filler_packet_test() {
-        initialize_logger();
-        let filler = Filler::new(INITIAL_SPEED);
-        //при скорости 1МБ/с за 1мс мы должны передать 1024 байт
-        let p = filler.create_filler(Instant::now().sub(Duration::from_millis(2u64))).unwrap();
-        info!("Размер пакета {} ", p.size);
-        assert!(p.size > 1000 && p.size < ONE_PACKET_MAX_SIZE)
-    }
 
     #[test]
     fn filler_test() {
