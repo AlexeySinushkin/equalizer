@@ -13,6 +13,7 @@ use crate::entry_point::listen;
 
 
 use crate::orchestrator::Orchestrator;
+use crate::speed::native_to_regular;
 use crate::statistic::SimpleStatisticCollector;
 
 mod throttler;
@@ -25,6 +26,7 @@ mod tests;
 mod orchestrator;
 mod statistic;
 mod speed_correction;
+mod speed;
 
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
@@ -72,18 +74,17 @@ done
                 if !collected_info.is_empty() {
                     let mut result : String = "".to_string();
                     for client in collected_info.iter() {
-                        let stat_line = format!("\r{}\t\t\t {:03}%/{:03}% \t  {}/{}\n",
+                        let calculated_speed = native_to_regular(client.calculated_speed);
+                        let target_speed = native_to_regular(client.target_speed);
+                        let stat_line = format!("\r{}-{:03}%/{:03}% {} / {}\t",
                                                       client.key,
                                                       client.percent_data,
                                                       client.percent_filler,
-                                                      client.calculated_speed / 1000,
-                                                      client.target_speed / 1000);
+                                                      calculated_speed,
+                                                      target_speed);
                         result.push_str(&stat_line);
                     }
                     print!("{}", result);
-                    for _lines in 0..collected_info.len() {
-                        print!("\033[1A")
-                    }
                     std::io::stdout().flush().unwrap();
                 }
             }

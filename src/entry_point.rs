@@ -55,6 +55,7 @@ mod tests {
     use rand::rngs::ThreadRng;
     use serial_test::serial;
     use crate::orchestrator::Orchestrator;
+    use crate::statistic::NoStatistic;
     use crate::tests::test_init::initialize_logger;
     use super::*;
 
@@ -78,7 +79,7 @@ mod tests {
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
         let (ct_vpn, cr_vpn) = channel();
         let (ct_filler, cr_filler) = channel();
-        let mut orchestrator = Orchestrator::new(cr_vpn, cr_filler);
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
         thread::spawn(|| {
             listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler).unwrap();
@@ -215,7 +216,7 @@ mod tests {
 
         let (ct_vpn, cr_vpn) = channel();
         let (ct_filler, cr_filler) = channel();
-        let mut orchestrator = Orchestrator::new(cr_vpn, cr_filler);
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
         thread::spawn(|| {
             listen(PROXY_LISTEN_PORT+1, VPN_LISTEN_PORT+1, FILLER_LISTEN_PORT+1, ct_vpn, ct_filler).unwrap();

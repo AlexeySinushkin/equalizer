@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender, SendError, TryRecvError};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -18,14 +18,30 @@ pub struct VpnProxy {
     //Мы к VPN серверу подключены
     //up_stream: TcpStream,
     pub join_handle: JoinHandle<()>,
-    pub ct_command: Sender<RuntimeCommand>,
-    pub cr_state: Receiver<ProxyState>,
+    ct_command: Sender<RuntimeCommand>,
+    cr_state: Receiver<ProxyState>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
     //будем использовать IP tun интерфейса
     pub key: String
 }
 
+pub trait Proxy {
+    fn get_key(&mut self) -> &String;
+    fn try_recv_state(&mut self) -> Result<ProxyState, TryRecvError>;
+    fn try_send_command(&mut self, command: RuntimeCommand) -> Result<(), SendError<RuntimeCommand>>;
+}
 
+impl Proxy for VpnProxy {
+    fn get_key(&mut self) -> &String {
+        &self.key
+    }
+    fn try_recv_state(&mut self) -> Result<ProxyState, TryRecvError> {
+        self.cr_state.try_recv()
+    }
+    fn try_send_command(&mut self, command: RuntimeCommand) -> Result<(), SendError<RuntimeCommand>> {
+        self.ct_command.send(command)
+    }
+}
 
 impl VpnProxy {
     /**

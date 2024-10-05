@@ -137,13 +137,13 @@ impl Filler {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
+    
     use std::thread::sleep;
-    use std::time::{Duration, Instant};
-    use log::info;
+    use std::time::{Duration};
+    
     use crate::filler::{Filler, OLD_AGE};
-    use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
-    use crate::tests::test_init::initialize_logger;
+    use crate::r#const::{INITIAL_SPEED};
+    
 
 
     #[test]
