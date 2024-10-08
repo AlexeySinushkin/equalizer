@@ -211,33 +211,23 @@ mod tests {
         const BUF_SIZE: usize = 1_000_020;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
-        //первым делом должен быть запущен наш OpenVPN (tcp mode)
-        let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT+1)).unwrap();
+        let TestStreams {
+            mut vpn_stream,
+            mut client_stream,
+            mut client_filler_stream,
+            mut orchestrator
+        } = create_test_streams(1);
 
-        let (ct_vpn, cr_vpn) = channel();
-        let (ct_filler, cr_filler) = channel();
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
-        //дальше готовимся принимать клиентов
-        thread::spawn(|| {
-            listen(PROXY_LISTEN_PORT+1, VPN_LISTEN_PORT+1, FILLER_LISTEN_PORT+1, ct_vpn, ct_filler).unwrap();
-        });
-        sleep(Duration::from_millis(200));
-        let mut client_proxy_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT+1)).unwrap();
-        sleep(Duration::from_millis(200));
-        let mut client_filler_stream = TcpStream::connect(format!("127.0.0.1:{}", FILLER_LISTEN_PORT+1)).unwrap();
-        let mut proxy_vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
-        client_filler_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
-        client_proxy_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
-
-        proxy_vpn_stream.write(&mut buf[..10]).unwrap();
         trace!("Ждем подключения Заполнителя");
         sleep(Duration::from_millis(100));
         orchestrator.invoke();
 
+        vpn_stream.write(&mut buf[..10]).unwrap();
+
         trace!("На этот момент заполнитель должен быть подключен и строчка ниже - это последние полезные данные");
-        proxy_vpn_stream.write(&mut buf[..10]).unwrap();
+        vpn_stream.write(&mut buf[..10]).unwrap();
         sleep(Duration::from_millis(20));
-        if let Ok(vpn_read) = client_proxy_stream.read(&mut buf){
+        if let Ok(vpn_read) = client_stream.read(&mut buf){
             info!("Полученных полезных байт должно быть 20 => {}", vpn_read);
         }
         orchestrator.invoke();
@@ -250,7 +240,7 @@ mod tests {
             let start = Instant::now();
             let half_secs = Duration::from_millis(500);
             for _i in 0..50 {
-                proxy_vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
+                vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
             info!("AWAITING HALF SECOND");
             while start.elapsed()<=half_secs {
@@ -260,9 +250,9 @@ mod tests {
             sleep(Duration::from_millis(100));
             info!("NO FILLER SHOULD BE AFTER NOW");
             for _i in 0..50 {
-                proxy_vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
+                vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
-            proxy_vpn_stream.shutdown(Shutdown::Both).unwrap();
+            vpn_stream.shutdown(Shutdown::Both).unwrap();
         });
 
 
@@ -272,7 +262,7 @@ mod tests {
         let mut data_offset = 0;
         let mut filler_offset = 0;
         while data_offset < BUF_SIZE {
-            if let Ok(read) = client_proxy_stream.read(&mut buf[data_offset..]) {
+            if let Ok(read) = client_stream.read(&mut buf[data_offset..]) {
                 data_offset += read;
             }
             if let Ok(read) = client_filler_stream.read(&mut buf[filler_offset..]) {
@@ -288,5 +278,74 @@ mod tests {
         join_handle.join().unwrap();
         assert!(data_offset >= 1_000_000);
         assert!(filler_offset > 50_000 && filler_offset < 120_000);
+    }
+
+
+    /*
+    Проверяем что сервер в целом не падает, если отключился какой-то клиент
+     */
+    #[test]
+    #[serial]
+    fn server_stable_test() {
+        initialize_logger();
+
+        const BUF_SIZE: usize = 10;
+        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+
+        let TestStreams {
+            mut vpn_stream,
+            mut client_stream,
+            mut client_filler_stream,
+            mut orchestrator
+        } = create_test_streams(2);
+
+        trace!("Ждем подключения Заполнителя");
+        sleep(Duration::from_millis(100));
+        client_stream.write(&buf).unwrap();
+        vpn_stream.write(&buf).unwrap();
+        client_filler_stream.read(&mut buf).unwrap();
+
+        sleep(Duration::from_millis(300));
+        client_stream.shutdown(Shutdown::Both).unwrap();
+        orchestrator.invoke();
+
+        sleep(Duration::from_millis(500));
+        let result = client_filler_stream.read(&mut buf);
+        assert!(result.is_err());
+    }
+
+    struct TestStreams {
+        //mock впн сервера
+        vpn_stream: TcpStream,
+        //мок клиента
+        client_stream: TcpStream,
+        //мок филлера (клиента)
+        client_filler_stream: TcpStream,
+        orchestrator: Orchestrator
+    }
+
+    fn create_test_streams(offset: u16) -> TestStreams {
+        //первым делом должен быть запущен наш OpenVPN (tcp mode)
+        let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT+offset)).unwrap();
+
+        let (ct_vpn, cr_vpn) = channel();
+        let (ct_filler, cr_filler) = channel();
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
+        //дальше готовимся принимать клиентов
+        thread::spawn(move || {
+            listen(PROXY_LISTEN_PORT+offset, VPN_LISTEN_PORT+offset, FILLER_LISTEN_PORT+offset, ct_vpn, ct_filler).unwrap();
+        });
+        sleep(Duration::from_millis(200));
+        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT+offset)).unwrap();
+        sleep(Duration::from_millis(200));
+        let client_filler_stream = TcpStream::connect(format!("127.0.0.1:{}", FILLER_LISTEN_PORT+offset)).unwrap();
+        let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
+        client_filler_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
+        client_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
+
+        trace!("Ждем подключения Заполнителя");
+        sleep(Duration::from_millis(100));
+        orchestrator.invoke();
+        TestStreams {vpn_stream, client_stream, client_filler_stream, orchestrator }
     }
 }

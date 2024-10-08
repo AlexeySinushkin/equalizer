@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use log::info;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed_correction::SpeedCorrector;
-use crate::statistic::{StatisticCollector, NoStatistic, ClientInfo};
+use crate::statistic::{StatisticCollector, ClientInfo};
 use crate::vpn_proxy::{Proxy, VpnProxy};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
@@ -45,8 +45,8 @@ impl Orchestrator {
 
 
     pub fn invoke(&mut self) {
-        while let received = self.check_new_connections() {
-            if !received {
+        loop  {
+            if !self.check_new_connections() {
                 break;
             }
         }

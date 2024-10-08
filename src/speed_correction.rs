@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use crate::objects::CollectedInfo;
+
 use crate::statistic::ClientInfo;
 
 const DUMMY_DURATION: Duration = Duration::from_millis(100);
@@ -49,7 +49,7 @@ impl SpeedCorrector {
     }
 
     fn append_info(&mut self, client_info: ClientInfo) {
-        let mut collected_info = self.get_or_create(&client_info.key);
+        let collected_info = self.get_or_create(&client_info.key);
 
         let now = Instant::now();
         collected_info.push(AvgSpeed {
@@ -62,7 +62,7 @@ impl SpeedCorrector {
         //update N-1
         if collected_info.len() > 1 {
             let index = collected_info.len() - 2;
-            let mut n_1 = collected_info.get_mut(index).unwrap();
+            let n_1 = collected_info.get_mut(index).unwrap();
             n_1.duration = now.sub(n_1.from)
         }
 

@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender, SendError, TryRecvError};
 use std::thread;
 use std::thread::JoinHandle;
@@ -55,7 +55,7 @@ impl VpnProxy {
     Создаем поток по чтению запросов от клиента
     и поток внутри дросселя для отправки данных (лимитированных по скорости)
      */
-    pub fn new(mut client_stream: TcpStream, mut up_stream: TcpStream) -> VpnProxy {
+    pub fn new(client_stream: TcpStream, up_stream: TcpStream) -> VpnProxy {
         let key = VpnProxy::get_key(&client_stream);
         let (ct_command, cr_command) = channel();
         let (ct_state, cr_state) = channel();
@@ -105,6 +105,7 @@ impl ThreadWorkingSet{
                     }
                     Err(_) => {
                         proxy.ct_state.send(ProxyState::Broken).unwrap();
+                        proxy.client_stream.shutdown(Shutdown::Both);
                         return;
                     }
                 }
@@ -119,6 +120,8 @@ impl ThreadWorkingSet{
                 match proxy.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
                     Err(_) => {
                         proxy.ct_state.send(ProxyState::Broken).unwrap();
+                        proxy.client_stream.shutdown(Shutdown::Both).unwrap();
+                        filler_stream.shutdown(Shutdown::Both).unwrap();
                         return;
                     }
                     Ok(_) =>{}
