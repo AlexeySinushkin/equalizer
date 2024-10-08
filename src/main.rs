@@ -14,7 +14,7 @@ use crate::entry_point::listen;
 
 use crate::orchestrator::Orchestrator;
 use crate::speed::native_to_regular;
-use crate::statistic::SimpleStatisticCollector;
+use crate::statistic::{ClientInfo, SimpleStatisticCollector};
 
 mod throttler;
 mod objects;
@@ -38,18 +38,9 @@ fn main() {
         println!("11196 - to accept filler clients");
         print!("
 On client side
-ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
-then establish vpn connection to 11194:127.0.0.1
-and filler connection to 11196:127.0.0.1
-(both inside one ssh session)
-
-Filler simple example
-#!/bin/sh
-while true
-do
- nc 127.0.0.1 11196 > /dev/null
- sleep 5
-done
+Setup cron every 10 minutes
+*/10 * * * * ssh -fNT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server \
+     -o ExitOnForwardFailure=yes && nc 127.0.0.1 11196 > /dev/null &
 ");
         return;
     }
@@ -71,24 +62,35 @@ done
             sleep(pause);
             orchestrator.invoke();
             if let Some(collected_info) = orchestrator.calculate_and_get() {
-                if !collected_info.is_empty() {
-                    let mut result : String = "".to_string();
-                    for client in collected_info.iter() {
-                        let calculated_speed = native_to_regular(client.calculated_speed);
-                        let target_speed = native_to_regular(client.target_speed);
-                        let stat_line = format!("\r{}-{:03}%/{:03}% {} / {}\t",
-                                                      client.key,
-                                                      client.percent_data,
-                                                      client.percent_filler,
-                                                      calculated_speed,
-                                                      target_speed);
-                        result.push_str(&stat_line);
-                    }
-                    print!("{}", result);
-                    std::io::stdout().flush().unwrap();
-                }
+                print_client_info(collected_info);
             }
         }
     });
     listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler).unwrap();
+}
+
+fn print_client_info(collected_info: Vec<ClientInfo>) {
+    if !collected_info.is_empty() {
+        let mut result : String = "".to_string();
+        for client in collected_info.iter() {
+            let calculated_speed = native_to_regular(client.calculated_speed);
+            let target_speed = native_to_regular(client.target_speed);
+            let stat_line = format!("\r{}-{:03}%/{:03}% {} / {}\t",
+                                    client.key,
+                                    client.percent_data,
+                                    client.percent_filler,
+                                    calculated_speed,
+                                    target_speed);
+            result.push_str(&stat_line);
+        }
+        print!("{}", result);
+        std::io::stdout().flush().unwrap();
+    }
+}
+
+
+#[test]
+fn print_client_info_it() {
+    let vec= vec![ClientInfo::default()];
+    print_client_info(vec);
 }

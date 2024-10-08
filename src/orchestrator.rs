@@ -172,6 +172,7 @@ mod tests {
     use std::sync::mpsc::{channel, SendError, TryRecvError};
     use std::time::Instant;
     use std::time::Duration;
+    use log::info;
     use crate::objects::{CollectedInfo, ProxyState, RuntimeCommand, SentPacket};
     use crate::orchestrator::Orchestrator;
     use crate::r#const::INITIAL_SPEED;
@@ -229,7 +230,7 @@ mod tests {
         let client = stat.into_iter().find(|_collected_info| true).unwrap();
         let calculated_speed = native_to_regular(client.calculated_speed);
         let target_speed = native_to_regular(client.target_speed);
-        print!("\r{}\t\t\t {:03}%/{:03}% \t  {}/{}",
+        info!("\r{}\t\t\t {:03}%/{:03}% \t  {}/{}",
                client.key,
                client.percent_data,
                client.percent_filler,

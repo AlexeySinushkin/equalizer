@@ -92,6 +92,7 @@ impl ThreadWorkingSet{
             let mut filler_stream: TcpStream;
 
             //цикл, который не использует заполнитель, а работает в режиме ожидания его появления
+            info!("Filler-less mode start");
             loop {
                 match proxy.exchange_loop_pre_filler() {
                     Ok(filler) => {

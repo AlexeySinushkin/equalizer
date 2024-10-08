@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::objects::{CollectedInfo, SentPacket};
 use crate::r#const::INITIAL_SPEED;
 
+#[derive(Debug, Default)]
 pub struct ClientInfo {
     pub key: String,
     pub percent_data: usize,
@@ -35,6 +36,9 @@ impl StatisticCollector for NoStatistic {
 
 const ANALYZE_PERIOD: Duration = Duration::from_millis(300);
 
+/*
+Ужимает информацию для отображения в консоле
+ */
 #[derive(Default)]
 pub struct SimpleStatisticCollector {
     collected_info: Vec<CurrentRollingInfo>,
@@ -140,5 +144,34 @@ impl StatisticCollector for SimpleStatisticCollector {
             return Some(result);
         }
         None
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::ops::Sub;
+    use std::time::{Duration, Instant};
+    use log::info;
+    use crate::objects::{CollectedInfo, SentPacket};
+    use crate::r#const::INITIAL_SPEED;
+    use crate::statistic::{SimpleStatisticCollector, StatisticCollector};
+
+    #[test]
+    fn simple_statistic_collector() {
+        let mut stat = SimpleStatisticCollector::default();
+        let key = "1".to_string();
+        let mut collected_info = CollectedInfo::default();
+        let fifty_ms_ago = Instant::now().sub(Duration::from_millis(50));
+        collected_info.target_speed = INITIAL_SPEED;
+        collected_info.data_count = 1;
+        collected_info.filler_count = 1;
+        collected_info.data_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 10_000 });
+        collected_info.filler_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 5_000 });
+
+        stat.append_info(&key, collected_info);
+        let client_info = stat.calculate_and_get().unwrap();
+        assert_eq!(1, client_info.len());
+        info!("{:?}", client_info.get(0));
     }
 }
