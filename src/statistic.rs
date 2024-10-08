@@ -129,7 +129,7 @@ impl StatisticCollector for SimpleStatisticCollector {
                     }).unwrap_or_else(|| { 0 });
                 let total_size = data_bytes + filler_bytes;
                 if total_size > 0 {
-                    let percent_data = data_bytes * 100 / total_size;
+                    let percent_data =  data_bytes * 100 / total_size;
                     let percent_filler = filler_bytes * 100 / total_size;
                     let calculated_speed = total_size / ANALYZE_PERIOD.as_millis() as usize;//TODO
                     result.push(ClientInfo {
@@ -138,6 +138,15 @@ impl StatisticCollector for SimpleStatisticCollector {
                         percent_data,
                         percent_filler,
                         calculated_speed,
+                    })
+                }else{
+                    //даже если посчитать не удалось, отправляем, чтобы не выглядело как ошибка
+                    result.push(ClientInfo {
+                        key: instance.key.clone(),
+                        target_speed: instance.target_speed,
+                        percent_data: 0,
+                        percent_filler: 0,
+                        calculated_speed: 0,
                     })
                 }
             }
