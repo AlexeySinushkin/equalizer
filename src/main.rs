@@ -1,6 +1,6 @@
 use std::{env, thread};
-use std::io::Write;
-
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 
 
 use std::sync::mpsc::{channel};
@@ -37,10 +37,18 @@ fn main() {
         println!("1194 - OpenVPN listening port (tcp)");
         println!("11196 - to accept filler clients");
         print!("
-On client side
-Setup cron every 10 minutes
-*/10 * * * * ssh -fNT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server \
-     -o ExitOnForwardFailure=yes && nc 127.0.0.1 11196 > /dev/null &
+ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
+then establish vpn connection to 11194:127.0.0.1
+and filler connection to 11196:127.0.0.1
+(both inside one ssh session)
+
+Filler simple example
+#!/bin/sh
+while true
+do
+ nc 127.0.0.1 11196 > /dev/null
+ sleep 5
+done
 ");
         return;
     }
@@ -93,4 +101,49 @@ fn print_client_info(collected_info: Vec<ClientInfo>) {
 fn print_client_info_it() {
     let vec= vec![ClientInfo::default()];
     print_client_info(vec);
+}
+
+/*
+Проверка, что статистика доходит до мейна
+*/
+#[test]
+#[serial]
+fn stat_goes_to_main() {
+    const PROXY_LISTEN_PORT: u16 = 11190;
+    const VPN_LISTEN_PORT: u16 = 11193;
+    const FILLER_LISTEN_PORT: u16 = 11196;
+    let (ct_vpn, cr_vpn) = channel();
+    let (ct_filler, cr_filler) = channel();
+    let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
+    thread::spawn(move || {
+        let pause = Duration::from_millis(50);
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
+                                                      Box::new(SimpleStatisticCollector::default()));
+        let mut buf: [u8; 100] = [0; 100];
+        sleep(Duration::from_millis(200));
+        let mut client_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT)).unwrap();
+        sleep(Duration::from_millis(200));
+        let mut client_filler_stream = TcpStream::connect(format!("127.0.0.1:{}", FILLER_LISTEN_PORT)).unwrap();
+        let mut vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
+
+
+        loop{
+            orchestrator.invoke();
+            sleep(pause);
+            client_stream.write(&buf).unwrap();
+            vpn_stream.write(&buf).unwrap();
+            client_filler_stream.read(&mut buf);
+
+            orchestrator.invoke();
+            sleep(pause);
+            client_stream.read(&mut buf).unwrap();
+            vpn_stream.read(&mut buf).unwrap();
+
+            orchestrator.invoke();
+            if let Some(collected_info) = orchestrator.calculate_and_get() {
+                print_client_info(collected_info);
+            }
+        }
+    });
+    listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler).unwrap();
 }

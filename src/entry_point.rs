@@ -15,7 +15,10 @@ pub fn listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, c
         // accept connections and process them serially
         for stream in listener.incoming() {
             if let Ok(vpn_proxy) = handle_client(stream.unwrap(), vpn_server_port) {
-                ct_vpn.send(vpn_proxy).expect("VPN Channel works");
+                let result = ct_vpn.send(vpn_proxy);
+                if result.is_err() {
+                    error!("VPN pipe is broken");
+                }
             }
         }
     });
@@ -23,7 +26,10 @@ pub fn listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, c
     let listener = TcpListener::bind(format!("127.0.0.1:{}", filler_port)).expect("bind to client filler port");
     // accept connections and process them serially
     for stream in listener.incoming() {
-        ct_filler.send(stream.unwrap()).expect("Filler Channel works");
+        let result = ct_filler.send(stream.unwrap());
+        if result.is_err(){
+            error!("Filler's pipe is broken");
+        }
     }
 
     j1.join()
@@ -55,7 +61,8 @@ mod tests {
     use rand::rngs::ThreadRng;
     use serial_test::serial;
     use crate::orchestrator::Orchestrator;
-    use crate::statistic::NoStatistic;
+    use crate::print_client_info;
+    use crate::statistic::{NoStatistic, SimpleStatisticCollector};
     use crate::tests::test_init::initialize_logger;
     use super::*;
 
@@ -316,6 +323,7 @@ mod tests {
         //проверяем что клиентов больше нет, а мы все еще не упали
         assert_eq!(0, orchestrator.get_pairs_count())
     }
+
 
     struct TestStreams {
         //mock впн сервера
