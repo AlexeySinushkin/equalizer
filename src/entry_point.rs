@@ -219,14 +219,13 @@ mod tests {
         } = create_test_streams(1);
 
         trace!("Ждем подключения Заполнителя");
-        sleep(Duration::from_millis(100));
         orchestrator.invoke();
 
         vpn_stream.write(&mut buf[..10]).unwrap();
 
         trace!("На этот момент заполнитель должен быть подключен и строчка ниже - это последние полезные данные");
         vpn_stream.write(&mut buf[..10]).unwrap();
-        sleep(Duration::from_millis(20));
+        sleep(Duration::from_millis(5));
         if let Ok(vpn_read) = client_stream.read(&mut buf){
             info!("Полученных полезных байт должно быть 20 => {}", vpn_read);
         }
@@ -244,7 +243,7 @@ mod tests {
             }
             info!("AWAITING HALF SECOND");
             while start.elapsed()<=half_secs {
-                sleep(Duration::from_millis(20))
+                sleep(Duration::from_millis(10))
             }
             info!("FILLER SHOULD START NOW");
             sleep(Duration::from_millis(100));
@@ -256,7 +255,7 @@ mod tests {
         });
 
 
-        let receive_time = Duration::from_millis(1150);
+        let receive_time = Duration::from_millis(1100);
         let start = Instant::now();
         trace!("Начали ожидание");
         let mut data_offset = 0;
@@ -348,7 +347,6 @@ mod tests {
         client_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
 
         trace!("Ждем подключения Заполнителя");
-        sleep(Duration::from_millis(100));
         orchestrator.invoke();
         TestStreams {vpn_stream, client_stream, client_filler_stream, orchestrator }
     }
