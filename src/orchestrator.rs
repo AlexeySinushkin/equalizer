@@ -73,6 +73,9 @@ impl Orchestrator {
                     ProxyState::Broken => {
                         info!("Broken {}", &proxy.get_key());
                         stat.clear_info(&proxy.get_key());
+                        //TODO вынести
+                        self.pairs.remove(i);
+                        break;
                     }
                 }
             }
