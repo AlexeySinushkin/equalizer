@@ -289,7 +289,7 @@ mod tests {
     fn server_stable_test() {
         initialize_logger();
 
-        const BUF_SIZE: usize = 10;
+        const BUF_SIZE: usize = 10_000;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
@@ -299,19 +299,23 @@ mod tests {
             mut orchestrator
         } = create_test_streams(2);
 
-        trace!("Ждем подключения Заполнителя");
-        sleep(Duration::from_millis(100));
-        client_stream.write(&buf).unwrap();
-        vpn_stream.write(&buf).unwrap();
-        client_filler_stream.read(&mut buf).unwrap();
+        client_stream.write(&buf[..10]).unwrap();
+        vpn_stream.write(&buf[..10]).unwrap();
 
-        sleep(Duration::from_millis(300));
+        sleep(Duration::from_millis(10));
+        //закрываем чтение
         client_stream.shutdown(Shutdown::Both).unwrap();
-        orchestrator.invoke();
-
-        sleep(Duration::from_millis(500));
-        let result = client_filler_stream.read(&mut buf);
-        assert!(result.is_err());
+        //пытаемся отправить в через прокси данные в закрытый канал
+        for _i in 0..100{
+            //получаем состояние Broken
+            orchestrator.invoke();
+            sleep(Duration::from_millis(10));
+            vpn_stream.write(&buf[..10]);
+            vpn_stream.flush();
+            client_filler_stream.read(&mut buf);
+        }
+        //проверяем что клиентов больше нет, а мы все еще не упали
+        assert_eq!(0, orchestrator.get_pairs_count())
     }
 
     struct TestStreams {

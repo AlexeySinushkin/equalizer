@@ -54,6 +54,10 @@ impl Orchestrator {
         self.send_statistic_to_speed_correction();
     }
 
+    pub fn get_pairs_count(&mut self) -> usize {
+        self.pairs.len()
+    }
+
     pub fn calculate_and_get(&mut self) -> Option<Vec<ClientInfo>> {
         self.stat.calculate_and_get()
     }
