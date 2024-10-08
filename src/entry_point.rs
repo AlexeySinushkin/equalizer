@@ -255,7 +255,7 @@ mod tests {
         });
 
 
-        let receive_time = Duration::from_millis(1100);
+        let receive_time = Duration::from_millis(1150);
         let start = Instant::now();
         trace!("Начали ожидание");
         let mut data_offset = 0;
