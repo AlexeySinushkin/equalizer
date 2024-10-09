@@ -8,7 +8,6 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use log::LevelFilter;
-use serial_test::serial;
 use simplelog::{Config, SimpleLogger};
 use crate::entry_point::listen;
 
