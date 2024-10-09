@@ -5,7 +5,7 @@ use crate::objects::{CollectedInfo, SentPacket};
 use crate::r#const::INITIAL_SPEED;
 
 #[derive(Debug, Default)]
-pub struct ClientInfo {
+pub struct Summary {
     pub key: String,
     pub percent_data: usize,
     pub percent_filler: usize,
@@ -18,7 +18,7 @@ pub struct ClientInfo {
 pub trait StatisticCollector {
     fn append_info(&mut self, key: &String, info: CollectedInfo);
     fn clear_info(&mut self, key: &String);
-    fn calculate_and_get(&mut self) -> Option<Vec<ClientInfo>>;
+    fn calculate_and_get(&mut self) -> Option<Vec<Summary>>;
 }
 
 
@@ -29,7 +29,7 @@ pub struct NoStatistic;
 impl StatisticCollector for NoStatistic {
     fn append_info(&mut self, _key: &String, _info: CollectedInfo) {}
     fn clear_info(&mut self, _key: &String) {}
-    fn calculate_and_get(&mut self) -> Option<Vec<ClientInfo>> {
+    fn calculate_and_get(&mut self) -> Option<Vec<Summary>> {
         None
     }
 }
@@ -113,9 +113,9 @@ impl StatisticCollector for SimpleStatisticCollector {
         }
     }
 
-    fn calculate_and_get(&mut self) -> Option<Vec<ClientInfo>> {
+    fn calculate_and_get(&mut self) -> Option<Vec<Summary>> {
         if !self.collected_info.is_empty() {
-            let mut result: Vec<ClientInfo> = vec![];
+            let mut result: Vec<Summary> = vec![];
             for instance in self.collected_info.iter() {
                 let data_bytes: usize = instance.data.iter()
                     .map(|sp| { sp.sent_size })
@@ -132,7 +132,7 @@ impl StatisticCollector for SimpleStatisticCollector {
                     let percent_data =  data_bytes * 100 / total_size;
                     let percent_filler = filler_bytes * 100 / total_size;
                     let calculated_speed = total_size / ANALYZE_PERIOD.as_millis() as usize;//TODO
-                    result.push(ClientInfo {
+                    result.push(Summary {
                         key: instance.key.clone(),
                         target_speed: instance.target_speed,
                         percent_data,
@@ -141,7 +141,7 @@ impl StatisticCollector for SimpleStatisticCollector {
                     })
                 }else{
                     //даже если посчитать не удалось, отправляем, чтобы не выглядело как ошибка
-                    result.push(ClientInfo {
+                    result.push(Summary {
                         key: instance.key.clone(),
                         target_speed: instance.target_speed,
                         percent_data: 0,
@@ -159,28 +159,41 @@ impl StatisticCollector for SimpleStatisticCollector {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
+    use std::ops::{Add, Sub};
     use std::time::{Duration, Instant};
     use log::info;
     use crate::objects::{CollectedInfo, SentPacket};
     use crate::r#const::INITIAL_SPEED;
-    use crate::statistic::{SimpleStatisticCollector, StatisticCollector};
+    use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
 
     #[test]
-    fn simple_statistic_collector() {
+    fn simple_statistic_collector_memory_leak() {
         let mut stat = SimpleStatisticCollector::default();
         let key = "1".to_string();
-        let mut collected_info = CollectedInfo::default();
-        let fifty_ms_ago = Instant::now().sub(Duration::from_millis(50));
-        collected_info.target_speed = INITIAL_SPEED;
-        collected_info.data_count = 1;
-        collected_info.filler_count = 1;
-        collected_info.data_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 10_000 });
-        collected_info.filler_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 5_000 });
+        let mut old_time = Instant::now().sub(ANALYZE_PERIOD).sub(ANALYZE_PERIOD);
 
-        stat.append_info(&key, collected_info);
+        //добавляем 10 старых пакетов и 10 которые должны идти в расчет
+        let increment = ANALYZE_PERIOD/10;
+        for _i in 0..20 {
+            let mut collected_info = CollectedInfo::default();
+            collected_info.target_speed = INITIAL_SPEED;
+            collected_info.data_count = 1;
+            collected_info.filler_count = 1;
+            collected_info.data_packets[0] = Some(SentPacket { sent_date: old_time, sent_size: 10_000 });
+            collected_info.filler_packets[0] = Some(SentPacket { sent_date: old_time, sent_size: 5_000 });
+            stat.append_info(&key, collected_info);
+            old_time = old_time.add(increment);
+        }
+
+        let rolling_info = stat.get_or_create(&key);
+        assert!(rolling_info.data.len()<=10);
+        assert!(rolling_info.filler.len()<=10);
+
         let client_info = stat.calculate_and_get().unwrap();
         assert_eq!(1, client_info.len());
-        info!("{:?}", client_info.get(0));
+        let summery = client_info.get(0).unwrap();
+        assert_eq!(66, summery.percent_data);
+        assert_eq!(33, summery.percent_filler);
+        info!("{:?}", summery);
     }
 }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::ops::Sub;
 use std::time::{Duration, Instant};
 
-use crate::statistic::ClientInfo;
+use crate::statistic::Summary;
 
 const DUMMY_DURATION: Duration = Duration::from_millis(100);
 const OLD_DATA: Duration = Duration::from_secs(5);
@@ -40,7 +40,7 @@ impl SpeedCorrector {
     /**
     Precondition: данные приходят хронологически от старых к новым
     */
-    pub fn append_and_get(&mut self, client_info: Vec<ClientInfo>) -> Option<Vec<ChangeSpeedRequired>>
+    pub fn append_and_get(&mut self, client_info: Vec<Summary>) -> Option<Vec<ChangeSpeedRequired>>
     {
         for info in client_info.into_iter() {
             self.append_info(info)
@@ -48,7 +48,7 @@ impl SpeedCorrector {
         None
     }
 
-    fn append_info(&mut self, client_info: ClientInfo) {
+    fn append_info(&mut self, client_info: Summary) {
         let collected_info = self.get_or_create(&client_info.key);
 
         let now = Instant::now();
