@@ -1,6 +1,5 @@
 use std::{env, thread};
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::io::{Write};
 use std::sync::mpsc::{channel};
 use std::thread::sleep;
 use std::time::Duration;
@@ -12,7 +11,7 @@ use crate::entry_point::start_listen;
 
 use crate::orchestrator::Orchestrator;
 use crate::speed::native_to_regular;
-use crate::statistic::{ClientInfo, SimpleStatisticCollector};
+use crate::statistic::{Summary, SimpleStatisticCollector};
 
 mod throttler;
 mod objects;
@@ -77,7 +76,7 @@ done
     join.join().unwrap();
 }
 
-fn print_client_info(collected_info: Vec<ClientInfo>) {
+fn print_client_info(collected_info: Vec<Summary>) {
     if !collected_info.is_empty() {
         let mut result : String = "".to_string();
         for client in collected_info.iter() {
@@ -99,7 +98,7 @@ fn print_client_info(collected_info: Vec<ClientInfo>) {
 
 #[test]
 fn print_client_info_it() {
-    let vec= vec![ClientInfo::default()];
+    let vec= vec![Summary::default()];
     print_client_info(vec);
 }
 

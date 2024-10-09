@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use log::info;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed_correction::SpeedCorrector;
-use crate::statistic::{StatisticCollector, ClientInfo};
+use crate::statistic::{StatisticCollector, Summary};
 use crate::vpn_proxy::{Proxy, VpnProxy};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
@@ -58,7 +58,7 @@ impl Orchestrator {
         self.pairs.len()
     }
 
-    pub fn calculate_and_get(&mut self) -> Option<Vec<ClientInfo>> {
+    pub fn calculate_and_get(&mut self) -> Option<Vec<Summary>> {
         self.stat.calculate_and_get()
     }
 

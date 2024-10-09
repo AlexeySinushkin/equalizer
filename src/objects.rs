@@ -9,9 +9,6 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn new() -> Self {
-        Self{size: ONE_PACKET_MAX_SIZE, buf: [0; ONE_PACKET_MAX_SIZE] }
-    }
     pub fn new_packet(size: usize) -> Self {
         Self{size, buf: [0; ONE_PACKET_MAX_SIZE] }
     }
