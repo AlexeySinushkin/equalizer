@@ -6,14 +6,14 @@
 */
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use crate::packet::{Packet, SentPacket};
-use crate::r#const::{ONE_PACKET_MAX_SIZE};
+use crate::objects::{CollectedInfo, Packet, SentPacket};
+use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
 const ANALYZE_PERIOD_MS: u64 = 100;
 const PREDICT_MS: usize = 10;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
 const ALMOST_OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS - PREDICT_MS as u64);
-const MAX_STAT_COUNT: usize = 100;
+
 
 enum PacketType {
     Data,
@@ -53,29 +53,14 @@ pub struct Filler {
     speed: usize,
 }
 
-
-pub struct CollectedInfo {
-    pub data_packets: [Option<SentPacket>; MAX_STAT_COUNT],
-    pub data_count: usize,
-    pub filler_packets: [Option<SentPacket>; MAX_STAT_COUNT],
-    pub filler_count: usize,
-}
-
-impl Default for CollectedInfo {
-    fn default() -> CollectedInfo {
-        CollectedInfo {
-            data_count: 0,
-            filler_count: 0,
-            data_packets: [None; MAX_STAT_COUNT],
-            filler_packets: [None; MAX_STAT_COUNT],
-        }
-    }
-}
-
 impl Filler {
     pub fn new(speed: usize) -> Filler {
         let queue: Vec<SentPacketType> = Vec::new();
         Self { queue, speed }
+    }
+
+    pub fn set_speed(&mut self, speed: usize){
+        self.speed = speed;
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
@@ -148,45 +133,18 @@ impl Filler {
         None
     }
 
-    /*
-    Подсчитываем какого должен быть размера пакет и создаем
-    U = n/t
-    n = U*t
-     */
-    fn create_filler(&self, from: Instant) -> Option<Packet> {
-        //скорость в дальнейшем может меняться - считаем каждый раз
-        let gap = Instant::now().duration_since(from);
-        let mut n = (self.speed as usize) * (gap.as_millis() as usize);
-        if n == 0 {
-            return None;
-        }
-        if n > ONE_PACKET_MAX_SIZE {
-            n = ONE_PACKET_MAX_SIZE;
-        }
-        //else TODO увеличить размер проанализировав отправленные данные за последние 100мс
-        Some(Packet::new_packet(n))
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
+    
     use std::thread::sleep;
-    use std::time::{Duration, Instant};
-    use log::{info};
+    use std::time::{Duration};
+    
     use crate::filler::{Filler, OLD_AGE};
-    use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
-    use crate::tests::test_init::initialize_logger;
+    use crate::r#const::{INITIAL_SPEED};
+    
 
-    #[test]
-    fn create_filler_packet_test() {
-        initialize_logger();
-        let filler = Filler::new(INITIAL_SPEED);
-        //при скорости 1МБ/с за 1мс мы должны передать 1024 байт
-        let p = filler.create_filler(Instant::now().sub(Duration::from_millis(2u64))).unwrap();
-        info!("Размер пакета {} ", p.size);
-        assert!(p.size > 1000 && p.size < ONE_PACKET_MAX_SIZE)
-    }
 
     #[test]
     fn filler_test() {

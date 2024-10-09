@@ -1,5 +1,5 @@
 use std::ops::Sub;
-use crate::packet::{SentPacket};
+use crate::objects::{SentPacket};
 use std::time::{Duration, Instant};
 
 const ANALYZE_PERIOD_MS: usize = 100;
@@ -19,6 +19,11 @@ impl ThrottlerAnalyzer {
         let period_capacity = speed*ANALYZE_PERIOD_MS;
         Self { queue, period_capacity}
     }
+
+    pub fn set_speed(&mut self, speed: usize){
+        self.period_capacity = speed*ANALYZE_PERIOD_MS;
+    }
+
     pub fn data_was_sent(&mut self, amount: usize) {
         self.queue.push(SentPacket { sent_date: Instant::now(), sent_size: amount });
     }

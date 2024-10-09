@@ -1,22 +1,30 @@
 use std::{env, thread};
-use std::io::Write;
-use std::ops::Sub;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel};
-use std::time::{Duration, Instant};
+use std::thread::sleep;
+use std::time::Duration;
+
 use log::LevelFilter;
 use simplelog::{Config, SimpleLogger};
-use crate::entry_point::listen;
-use crate::filler::CollectedInfo;
-use crate::packet::SentPacket;
+use crate::entry_point::start_listen;
+
+
+use crate::orchestrator::Orchestrator;
+use crate::speed::native_to_regular;
+use crate::statistic::{ClientInfo, SimpleStatisticCollector};
 
 mod throttler;
-mod packet;
+mod objects;
 mod r#const;
-mod bank;
 mod vpn_proxy;
 mod entry_point;
 mod filler;
 mod tests;
+mod orchestrator;
+mod statistic;
+mod speed_correction;
+mod speed;
 
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
@@ -24,9 +32,8 @@ fn main() {
     if args.len() < 4 {
         println!("Example usage: ./equalizer 11194 1194 11196");
         println!("11194 - to accept vpn clients");
-        println!("1194 - OpenVPN listening address (tcp)");
+        println!("1194 - OpenVPN listening port (tcp)");
         println!("11196 - to accept filler clients");
-        println!("Filler simple example");
         print!("
 On client side
 ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
@@ -34,6 +41,7 @@ then establish vpn connection to 11194:127.0.0.1
 and filler connection to 11196:127.0.0.1
 (both inside one ssh session)
 
+Filler simple example
 #!/bin/sh
 while true
 do
@@ -47,62 +55,52 @@ done
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let filler_listen_port: u16 = *&args.get(3).unwrap().parse().unwrap();
 
-    let (ct_stat, cr_stat) = channel::<CollectedInfo>();
-    thread::spawn(move || {
-        let pbstr = " ".repeat(20).to_string();
-        let mut data : Vec<SentPacket> = vec![];
-        let mut filler : Vec<SentPacket> = vec![];
-        let half_secs = Duration::from_millis(500);
-
-        while let Ok(stat) = cr_stat.recv() {
-            for i in 0..stat.data_count {
-                data.push(stat.data_packets[i].unwrap());
+    let (ct_vpn, cr_vpn) = channel();
+    let (ct_filler, cr_filler) = channel();
+    let (_ct_stop, cr_stop) = channel();
+    let join = start_listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler, cr_stop).unwrap();
+    thread::spawn(|| {
+        let pause = Duration::from_millis(50);
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
+                                                      Box::new(SimpleStatisticCollector::default()));
+        loop{
+            orchestrator.invoke();
+            sleep(pause);
+            orchestrator.invoke();
+            sleep(pause);
+            orchestrator.invoke();
+            if let Some(collected_info) = orchestrator.calculate_and_get() {
+                print_client_info(collected_info);
             }
-            for i in 0..stat.filler_count {
-                filler.push(stat.filler_packets[i].unwrap());
-            }
-            let old_packets = Instant::now().sub(half_secs);
-            while let Some(first) = data.first() {
-                if first.sent_date<old_packets{
-                    data.remove(0);
-                }else{
-                    break;
-                }
-            }
-            while let Some(first) = filler.first() {
-                if first.sent_date<old_packets{
-                    filler.remove(0);
-                }else{
-                    break;
-                }
-            }
-
-            let data_bytes: usize = data.iter()
-                .map(|sp| { sp.sent_size })
-                .reduce(|acc_size: usize, size| {
-                    acc_size + size
-            }).unwrap_or_else(|| {0});
-            let filler_bytes: usize = filler.iter()
-                .map(|sp| { sp.sent_size })
-                .reduce(|acc_size: usize, size| {
-                    acc_size + size
-                }).unwrap_or_else(|| {0});
-
-
-
-            let total_size = data_bytes + filler_bytes;
-            if total_size==0{
-                continue;
-            }
-            let percent_data = data_bytes * 100 / total_size;
-            let percent_filler = filler_bytes * 100 / total_size;
-            let avg_data_size: usize = match data.len() {
-                0 => 0,
-                _ => data_bytes / data.len()
-            };
-            print!("\r\t\t\t {:03}%/{:03}% \tavg data size {}{}", percent_data, percent_filler, avg_data_size, &pbstr);
-            std::io::stdout().flush().unwrap();
         }
     });
-    listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_stat).unwrap();
+    join.join().unwrap();
 }
+
+fn print_client_info(collected_info: Vec<ClientInfo>) {
+    if !collected_info.is_empty() {
+        let mut result : String = "".to_string();
+        for client in collected_info.iter() {
+            let calculated_speed = native_to_regular(client.calculated_speed);
+            let target_speed = native_to_regular(client.target_speed);
+            let stat_line = format!("\r{}-{:03}%/{:03}% {} / {}\t",
+                                    client.key,
+                                    client.percent_data,
+                                    client.percent_filler,
+                                    calculated_speed,
+                                    target_speed);
+            result.push_str(&stat_line);
+        }
+        print!("{}", result);
+        std::io::stdout().flush().unwrap();
+    }
+}
+
+
+#[test]
+fn print_client_info_it() {
+    let vec= vec![ClientInfo::default()];
+    print_client_info(vec);
+}
+
+
