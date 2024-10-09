@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender, SendError, TryRecvError};
 use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 use crate::throttler::ThrottlerAnalyzer;
 use log::{info, trace};
@@ -12,6 +12,7 @@ use crate::objects::{ProxyState, RuntimeCommand};
 use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
 
 const A_FEW_SPACE : usize = 100;
+const BURNOUT_DELAY: Duration = Duration::from_micros(500);
 
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
@@ -105,7 +106,7 @@ impl ThreadWorkingSet{
                         }
                     }
                     Err(_) => {
-                        proxy.ct_state.send(ProxyState::Broken).unwrap();
+                        let _ = proxy.ct_state.send(ProxyState::Broken).unwrap();
                         proxy.client_stream.shutdown(Shutdown::Both).unwrap();
                         return;
                     }
@@ -120,7 +121,7 @@ impl ThreadWorkingSet{
             loop {
                 match proxy.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
                     Err(_) => {
-                        proxy.ct_state.send(ProxyState::Broken).unwrap();
+                        let _ = proxy.ct_state.send(ProxyState::Broken);
                         proxy.client_stream.shutdown(Shutdown::Both).unwrap();
                         filler_stream.shutdown(Shutdown::Both).unwrap();
                         return;
@@ -192,6 +193,8 @@ impl ThreadWorkingSet{
                     }
                 }
             }
+        }else{
+            sleep(BURNOUT_DELAY);
         }
         self.ct_state.send(ProxyState::Info(filler.clean()))?;
         if let Ok(command) = self.cr_command.try_recv() {

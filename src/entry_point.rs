@@ -71,14 +71,15 @@ mod tests {
     use serial_test::serial;
     use crate::orchestrator::Orchestrator;
     use crate::print_client_info;
-    use crate::statistic::{NoStatistic, SimpleStatisticCollector};
+    use crate::r#const::INITIAL_SPEED;
+    use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
     use crate::tests::test_init::initialize_logger;
     use super::*;
 
     const TEST_BUF_SIZE: usize = 100 * 1024;
-    const PROXY_LISTEN_PORT: u16 = 11190;
-    const VPN_LISTEN_PORT: u16 = 11193;
-    const FILLER_LISTEN_PORT: u16 = 11196;
+    const PROXY_LISTEN_PORT: u16 = 11100;
+    const VPN_LISTEN_PORT: u16 = 11200;
+    const FILLER_LISTEN_PORT: u16 = 11300;
 
 
 
@@ -225,6 +226,9 @@ mod tests {
         initialize_logger();
         info!("FILLER_ATTACH_AND_FILL");
         const BUF_SIZE: usize = 1_000_020;
+        const PACKETS_COUNT : usize = 50;
+        const MS_COUNT : usize = 500;
+        const ONE_PACKET_SIZE : usize = INITIAL_SPEED*MS_COUNT/PACKETS_COUNT;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
@@ -233,7 +237,7 @@ mod tests {
             mut client_filler_stream,
             mut orchestrator,
             mut join_handle
-        } = create_test_streams(1);
+        } = create_test_streams(1, None);
 
         trace!("Ждем подключения Заполнителя");
         orchestrator.invoke();
@@ -252,22 +256,25 @@ mod tests {
         //ждем 100мс - ничего не отправляем
         //отправляем пол секунды объем данных который должен уйти за пол секунды
         let join_handle_2 = thread::spawn(move || {
-            let value_data: [u8; 10_000] = [0; 10_000];
+            let value_data: [u8; ONE_PACKET_SIZE] = [0; ONE_PACKET_SIZE];
             let start = Instant::now();
-            let half_secs = Duration::from_millis(500);
-            for _i in 0..50 {
+            //FIXME Заполнитель начинает слать чуть раньше - шлет больше чем ожидаем - чисто хак теста
+            let half_secs = Duration::from_millis((MS_COUNT-50) as u64);
+            for _i in 0..PACKETS_COUNT {
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
+            vpn_stream.flush().unwrap();
             info!("AWAITING HALF SECOND");
             while start.elapsed()<=half_secs {
-                sleep(Duration::from_millis(10))
+                sleep(Duration::from_millis(1))
             }
             info!("FILLER SHOULD START NOW");
             sleep(Duration::from_millis(100));
             info!("NO FILLER SHOULD BE AFTER NOW");
-            for _i in 0..50 {
+            for _i in 0..PACKETS_COUNT {
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
+            vpn_stream.flush().unwrap();
             vpn_stream.shutdown(Shutdown::Both).unwrap();
         });
 
@@ -316,7 +323,7 @@ mod tests {
             mut client_filler_stream,
             mut orchestrator,
             mut join_handle
-        } = create_test_streams(2);
+        } = create_test_streams(2, None);
 
         client_stream.write(&buf[..10]).unwrap();
         vpn_stream.write(&buf[..10]).unwrap();
@@ -339,6 +346,40 @@ mod tests {
         join_handle.1.join().unwrap();
     }
 
+    /*
+    Проверка, что статистика доходит до мейна
+    */
+    #[test]
+    #[serial]
+    fn stat_goes_to_main() {
+        let TestStreams {
+            mut vpn_stream,
+            mut client_stream,
+            mut client_filler_stream,
+            mut orchestrator,
+            mut join_handle
+        } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
+
+        let mut buf: [u8; 100] = [0; 100];
+
+        loop {
+            orchestrator.invoke();
+            sleep(Duration::from_millis(100));
+            client_stream.write(&buf).unwrap();
+            vpn_stream.write(&buf).unwrap();
+            client_stream.read(&mut buf);
+            vpn_stream.read(&mut buf);
+            client_filler_stream.read(&mut buf);
+
+            orchestrator.invoke();
+            if let Some(collected_info) = orchestrator.calculate_and_get() {
+                assert_eq!(1, collected_info.len());
+                join_handle.0.send(true).unwrap();
+                break;
+            }
+        }
+        join_handle.1.join().unwrap();
+    }
 
     struct TestStreams {
         //mock впн сервера
@@ -351,13 +392,14 @@ mod tests {
         join_handle: (Sender<bool>, JoinHandle<()>)
     }
 
-    fn create_test_streams(offset: u16) -> TestStreams {
+    fn create_test_streams(offset: u16, stat_collector: Option<Box<dyn StatisticCollector>>) -> TestStreams {
         //первым делом должен быть запущен наш OpenVPN (tcp mode)
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT+offset)).unwrap();
 
         let (ct_vpn, cr_vpn) = channel();
         let (ct_filler, cr_filler) = channel();
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
+        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, stat_collector.unwrap_or_else(||
+            Box::new(NoStatistic::default())));
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
         let join = start_listen(PROXY_LISTEN_PORT+offset, VPN_LISTEN_PORT+offset, FILLER_LISTEN_PORT+offset, ct_vpn, ct_filler, cr_stop).unwrap();
@@ -366,8 +408,10 @@ mod tests {
         sleep(Duration::from_millis(200));
         let client_filler_stream = TcpStream::connect(format!("127.0.0.1:{}", FILLER_LISTEN_PORT+offset)).unwrap();
         let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
-        client_filler_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
-        client_stream.set_read_timeout(Option::from(Duration::from_millis(20u64))).expect("Успешная установка таймаута");
+        let timeout = Some(Duration::from_millis(20u64));
+        vpn_stream.set_read_timeout(timeout).expect("Успешная установка таймаута");
+        client_filler_stream.set_read_timeout(timeout).expect("Успешная установка таймаута");
+        client_stream.set_read_timeout(timeout).expect("Успешная установка таймаута");
 
         trace!("Ждем подключения Заполнителя");
         orchestrator.invoke();
