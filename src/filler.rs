@@ -71,6 +71,30 @@ impl Filler {
         self.queue.push(SentPacketType::new_filler(amount));
     }
 
+    pub fn clean_almost_full(&mut self) -> Option<CollectedInfo> {
+        let now = Instant::now();
+        let old_threshold = now.sub(OLD_AGE);
+        let mut data_count = 0;
+        let mut filler_count = 0;
+        for i in 0..self.queue.len() {
+            let pack = self.queue.get(i).unwrap();
+            if pack.is_older(&old_threshold) {
+                match pack.packet_type {
+                    PacketType::Data => {
+                        data_count += 1;
+                    },
+                    PacketType::Filler => {
+                        filler_count += 1;
+                    }
+                }
+                if data_count >= MAX_STAT_COUNT - 1 || filler_count >= MAX_STAT_COUNT - 1 {
+                    return Some(self.clean());
+                }
+            }
+        }
+        None
+    }
+
     /*
     очищаем информацию о пакетах, которые старше 100мс
      */

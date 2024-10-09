@@ -82,7 +82,7 @@ fn print_client_info(collected_info: Vec<Summary>) {
         for client in collected_info.iter() {
             let calculated_speed = native_to_regular(client.calculated_speed);
             let target_speed = native_to_regular(client.target_speed);
-            let stat_line = format!("\r{}-{:03}%/{:03}% {} / {}\t",
+            let stat_line = format!("\r{}- {:02}% / {:02}% {} / {}\t",
                                     client.key,
                                     client.percent_data,
                                     client.percent_filler,
