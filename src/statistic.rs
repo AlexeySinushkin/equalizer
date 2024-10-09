@@ -54,7 +54,7 @@ impl SimpleStatisticCollector {
         let new = CurrentRollingInfo::new(key.clone());
         self.collected_info.push(new);
         let last_index = self.collected_info.len() - 1;
-        return &mut self.collected_info[last_index];
+        &mut self.collected_info[last_index]
     }
 }
 

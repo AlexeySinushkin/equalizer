@@ -1,38 +1,47 @@
 use std::{io, thread};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::sync::mpsc::{Sender};
-
+use std::sync::mpsc::{Receiver, Sender};
+use std::thread::{sleep, JoinHandle};
 use log::{error, info};
-
-
 use crate::vpn_proxy::{VpnProxy};
 
 
-
-pub fn listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<VpnProxy>, ct_filler: Sender<TcpStream>) -> std::thread::Result<()> {
-    let j1 = thread::spawn(move || {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
-        // accept connections and process them serially
-        for stream in listener.incoming() {
-            if let Ok(vpn_proxy) = handle_client(stream.unwrap(), vpn_server_port) {
-                let result = ct_vpn.send(vpn_proxy);
-                if result.is_err() {
-                    error!("VPN pipe is broken");
+pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<VpnProxy>, ct_filler: Sender<TcpStream>,
+                    stop: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
+    let join = thread::spawn(move || {
+        let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
+        client_listener.set_nonblocking(true).expect("TODO: panic message");
+        let filler_listener = TcpListener::bind(format!("127.0.0.1:{}", filler_port)).expect("bind to client filler port");
+        filler_listener.set_nonblocking(true).expect("TODO: panic message");
+        let sleep_ms = std::time::Duration::from_millis(50);
+        loop {
+            match client_listener.accept() {
+                Ok((stream, _addr)) => {
+                    if let Ok(vpn_proxy) = handle_client(stream, vpn_server_port) {
+                        let result = ct_vpn.send(vpn_proxy);
+                        if result.is_err() {
+                            error!("VPN pipe is broken");
+                        }
+                    }
                 }
+                _=>{}
             }
+            match filler_listener.accept() {
+                Ok((stream, _addr)) => {
+                    let result = ct_filler.send(stream);
+                    if result.is_err() {
+                        error!("Filler's pipe is broken");
+                    }
+                }
+                _=>{}
+            }
+            if let Ok(_) = stop.try_recv(){
+                break;
+            }
+            sleep(sleep_ms);
         }
     });
-
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", filler_port)).expect("bind to client filler port");
-    // accept connections and process them serially
-    for stream in listener.incoming() {
-        let result = ct_filler.send(stream.unwrap());
-        if result.is_err(){
-            error!("Filler's pipe is broken");
-        }
-    }
-
-    j1.join()
+    Ok(join)
 }
 
 fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<VpnProxy> {
@@ -40,11 +49,11 @@ fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<V
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        return Ok(VpnProxy::new(client_stream, result.unwrap()));
+        Ok(VpnProxy::new(client_stream, result.unwrap()))
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;
-        return Err(result.err().unwrap());
+        Err(result.err().unwrap())
     }
 }
 
@@ -88,9 +97,9 @@ mod tests {
         let (ct_filler, cr_filler) = channel();
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
-        thread::spawn(|| {
-            listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler).unwrap();
-        });
+        let (ct_stop, cr_stop) = channel();
+        start_listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler, cr_stop).unwrap();
+
 
         sleep(Duration::from_millis(500));
 
@@ -222,7 +231,8 @@ mod tests {
             mut vpn_stream,
             mut client_stream,
             mut client_filler_stream,
-            mut orchestrator
+            mut orchestrator,
+            mut join_handle
         } = create_test_streams(1);
 
         trace!("Ждем подключения Заполнителя");
@@ -241,7 +251,7 @@ mod tests {
         //отправляем пол секунды объем данных который должен уйти за пол секунды
         //ждем 100мс - ничего не отправляем
         //отправляем пол секунды объем данных который должен уйти за пол секунды
-        let join_handle = thread::spawn(move || {
+        let join_handle_2 = thread::spawn(move || {
             let value_data: [u8; 10_000] = [0; 10_000];
             let start = Instant::now();
             let half_secs = Duration::from_millis(500);
@@ -281,9 +291,11 @@ mod tests {
             trace!("Прошло {} мс", start.elapsed().as_millis());
         }
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
-        join_handle.join().unwrap();
+        join_handle_2.join().unwrap();
         assert!(data_offset >= 1_000_000);
         assert!(filler_offset > 50_000 && filler_offset < 120_000);
+        join_handle.0.send(true).unwrap();
+        join_handle.1.join().unwrap();
     }
 
 
@@ -302,7 +314,8 @@ mod tests {
             mut vpn_stream,
             mut client_stream,
             mut client_filler_stream,
-            mut orchestrator
+            mut orchestrator,
+            mut join_handle
         } = create_test_streams(2);
 
         client_stream.write(&buf[..10]).unwrap();
@@ -321,7 +334,9 @@ mod tests {
             client_filler_stream.read(&mut buf);
         }
         //проверяем что клиентов больше нет, а мы все еще не упали
-        assert_eq!(0, orchestrator.get_pairs_count())
+        assert_eq!(0, orchestrator.get_pairs_count());
+        join_handle.0.send(true).unwrap();
+        join_handle.1.join().unwrap();
     }
 
 
@@ -332,7 +347,8 @@ mod tests {
         client_stream: TcpStream,
         //мок филлера (клиента)
         client_filler_stream: TcpStream,
-        orchestrator: Orchestrator
+        orchestrator: Orchestrator,
+        join_handle: (Sender<bool>, JoinHandle<()>)
     }
 
     fn create_test_streams(offset: u16) -> TestStreams {
@@ -343,9 +359,8 @@ mod tests {
         let (ct_filler, cr_filler) = channel();
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
-        thread::spawn(move || {
-            listen(PROXY_LISTEN_PORT+offset, VPN_LISTEN_PORT+offset, FILLER_LISTEN_PORT+offset, ct_vpn, ct_filler).unwrap();
-        });
+        let (ct_stop, cr_stop) = channel();
+        let join = start_listen(PROXY_LISTEN_PORT+offset, VPN_LISTEN_PORT+offset, FILLER_LISTEN_PORT+offset, ct_vpn, ct_filler, cr_stop).unwrap();
         sleep(Duration::from_millis(200));
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT+offset)).unwrap();
         sleep(Duration::from_millis(200));
@@ -356,6 +371,6 @@ mod tests {
 
         trace!("Ждем подключения Заполнителя");
         orchestrator.invoke();
-        TestStreams {vpn_stream, client_stream, client_filler_stream, orchestrator }
+        TestStreams {vpn_stream, client_stream, client_filler_stream, orchestrator, join_handle: (ct_stop, join) }
     }
 }

@@ -1,15 +1,13 @@
 use std::{env, thread};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-
-
 use std::sync::mpsc::{channel};
 use std::thread::sleep;
 use std::time::Duration;
 
 use log::LevelFilter;
 use simplelog::{Config, SimpleLogger};
-use crate::entry_point::listen;
+use crate::entry_point::start_listen;
 
 
 use crate::orchestrator::Orchestrator;
@@ -58,7 +56,8 @@ done
 
     let (ct_vpn, cr_vpn) = channel();
     let (ct_filler, cr_filler) = channel();
-
+    let (_ct_stop, cr_stop) = channel();
+    let join = start_listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler, cr_stop).unwrap();
     thread::spawn(|| {
         let pause = Duration::from_millis(50);
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
@@ -74,7 +73,7 @@ done
             }
         }
     });
-    listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler).unwrap();
+    join.join().unwrap();
 }
 
 fn print_client_info(collected_info: Vec<ClientInfo>) {
@@ -107,15 +106,17 @@ fn print_client_info_it() {
 Проверка, что статистика доходит до мейна
 */
 #[test]
-#[serial]
 fn stat_goes_to_main() {
     const PROXY_LISTEN_PORT: u16 = 11190;
     const VPN_LISTEN_PORT: u16 = 11193;
     const FILLER_LISTEN_PORT: u16 = 11196;
     let (ct_vpn, cr_vpn) = channel();
     let (ct_filler, cr_filler) = channel();
-    let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
+    let (ct_stop, cr_stop) = channel();
+    let join = start_listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler, cr_stop).unwrap();
+
     thread::spawn(move || {
+        let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
         let pause = Duration::from_millis(50);
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
                                                       Box::new(SimpleStatisticCollector::default()));
@@ -141,9 +142,10 @@ fn stat_goes_to_main() {
 
             orchestrator.invoke();
             if let Some(collected_info) = orchestrator.calculate_and_get() {
-                print_client_info(collected_info);
+                ct_stop.send(true).unwrap()
             }
         }
     });
-    listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, FILLER_LISTEN_PORT, ct_vpn, ct_filler).unwrap();
+
+    join.join().unwrap();
 }

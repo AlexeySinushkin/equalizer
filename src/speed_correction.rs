@@ -71,6 +71,8 @@ impl SpeedCorrector {
         while let Some(first) = collected_info.first() {
             if first.from<old_threshold{
                 collected_info.remove(0);
+            } else {
+              break;
             }
         }
     }
@@ -80,6 +82,6 @@ impl SpeedCorrector {
             self.collected_info.insert(key.clone(), vec![]);
         }
         let vec = self.collected_info.get_mut(key).unwrap();
-        return vec;
+        vec
     }
 }
