@@ -6,15 +6,15 @@ use std::ops::{DerefMut};
 use std::sync::mpsc::{Receiver};
 use std::time::{Duration, Instant};
 use log::info;
-use crate::objects::{ProxyState, RuntimeCommand};
-use crate::speed_correction::SpeedCorrector;
+use crate::objects::{Channel, ProxyState, RuntimeCommand};
+use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
-use crate::vpn_proxy::{Proxy, VpnProxy};
+use crate::core::vpn_proxy::{Proxy, VpnProxy};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
 
 pub struct Orchestrator {
-    new_proxy_receiver: Receiver<VpnProxy>,
+    new_proxy_receiver: Receiver<Channel>,
     new_filler_receiver: Receiver<TcpStream>,
     proxy_only: Vec<VpnProxy>,
     filler_only: Vec<TcpStream>,
@@ -25,7 +25,7 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new_stat(new_proxy_receiver: Receiver<VpnProxy>,
+    pub fn new_stat(new_proxy_receiver: Receiver<Channel>,
                     new_filler_receiver: Receiver<TcpStream>,
                     stat: Box<dyn StatisticCollector>) -> Orchestrator {
         let proxy_only: Vec<VpnProxy> = vec![];
@@ -112,7 +112,8 @@ impl Orchestrator {
     }
 
     fn check_new_connections(&mut self) -> bool {
-        if let Ok(proxy) = self.new_proxy_receiver.try_recv() {
+        if let Ok(main_channel) = self.new_proxy_receiver.try_recv() {
+            let proxy = VpnProxy::new(main_channel.client_stream, main_channel.up_stream);
             //ищем пару
             for i in 0..self.filler_only.len() {
                 let filler = &self.filler_only[i];
@@ -178,7 +179,7 @@ mod tests {
     use crate::speed::INITIAL_SPEED;
     use crate::speed::native_to_regular;
     use crate::statistic::SimpleStatisticCollector;
-    use crate::vpn_proxy::{Proxy};
+    use crate::core::vpn_proxy::{Proxy};
 
     struct TestProxy {
         key: String,

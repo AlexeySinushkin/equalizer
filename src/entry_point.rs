@@ -3,10 +3,10 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use log::{error, info};
-use crate::vpn_proxy::{VpnProxy};
+use crate::core::vpn_proxy::{VpnProxy};
+use crate::objects::Channel;
 
-
-pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<VpnProxy>, ct_filler: Sender<TcpStream>,
+pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<Channel>, ct_filler: Sender<TcpStream>,
                     stop: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
         let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
@@ -44,12 +44,12 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
     Ok(join)
 }
 
-fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<VpnProxy> {
+fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<Channel> {
     println!("Client connected. Theirs address {:?}", client_stream.peer_addr().unwrap());
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        Ok(VpnProxy::new(client_stream, result.unwrap()))
+        Ok(Channel::new(result.unwrap(), client_stream))
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;

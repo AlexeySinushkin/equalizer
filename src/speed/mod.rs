@@ -1,5 +1,4 @@
-
-
+pub mod speed_correction;
 
 //10 Мбит/с = 1МБ/с = 1048 байт/мс
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;

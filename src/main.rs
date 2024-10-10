@@ -1,6 +1,6 @@
 use std::{env, thread};
-use std::io::{Write};
-use std::sync::mpsc::{channel};
+use std::io::Write;
+use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -11,19 +11,15 @@ use crate::entry_point::start_listen;
 
 use crate::orchestrator::Orchestrator;
 use crate::speed::native_to_regular;
-use crate::statistic::{Summary, SimpleStatisticCollector};
+use crate::statistic::{SimpleStatisticCollector, Summary};
 
-mod throttler;
 mod objects;
-mod vpn_proxy;
 mod entry_point;
-mod filler;
 mod tests;
 mod orchestrator;
 mod statistic;
-mod speed_correction;
 mod speed;
-
+mod core;
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();

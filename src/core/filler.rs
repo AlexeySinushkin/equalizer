@@ -163,7 +163,7 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
     
-    use crate::filler::{Filler, OLD_AGE};
+    use crate::core::filler::{Filler, OLD_AGE};
     use crate::speed::INITIAL_SPEED;
 
     #[test]
