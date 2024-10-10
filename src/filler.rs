@@ -6,9 +6,7 @@
 */
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use crate::objects::{HotPotatoInfo, Packet, SentPacket};
-use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
-
+use crate::objects::{HotPotatoInfo, Packet, SentPacket, MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 const ANALYZE_PERIOD_MS: u64 = 100;
 const PREDICT_MS: usize = 10;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
@@ -163,12 +161,10 @@ impl Filler {
 mod tests {
     
     use std::thread::sleep;
-    use std::time::{Duration};
+    use std::time::Duration;
     
     use crate::filler::{Filler, OLD_AGE};
-    use crate::r#const::{INITIAL_SPEED};
-    
-
+    use crate::speed::INITIAL_SPEED;
 
     #[test]
     fn filler_test() {

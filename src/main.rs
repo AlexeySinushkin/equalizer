@@ -15,7 +15,6 @@ use crate::statistic::{Summary, SimpleStatisticCollector};
 
 mod throttler;
 mod objects;
-mod r#const;
 mod vpn_proxy;
 mod entry_point;
 mod filler;

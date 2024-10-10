@@ -175,7 +175,7 @@ mod tests {
     use log::info;
     use crate::objects::{HotPotatoInfo, ProxyState, RuntimeCommand, SentPacket};
     use crate::orchestrator::Orchestrator;
-    use crate::r#const::INITIAL_SPEED;
+    use crate::speed::INITIAL_SPEED;
     use crate::speed::native_to_regular;
     use crate::statistic::SimpleStatisticCollector;
     use crate::vpn_proxy::{Proxy};

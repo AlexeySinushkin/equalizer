@@ -1,9 +1,11 @@
 use std::net::TcpStream;
 
 use std::time::Instant;
-use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
 
+//размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
+pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
+pub const MAX_STAT_COUNT: usize = 10;
 pub struct Packet {
     pub size: usize,
     pub buf: [u8; ONE_PACKET_MAX_SIZE]
@@ -60,5 +62,3 @@ pub enum ProxyState {
     Info(HotPotatoInfo),
     Broken
 }
-
-

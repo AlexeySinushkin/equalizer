@@ -2,7 +2,7 @@ use std::ops::Sub;
 use std::time::Instant;
 use std::time::Duration;
 use crate::objects::{HotPotatoInfo, SentPacket};
-use crate::r#const::INITIAL_SPEED;
+use crate::speed::INITIAL_SPEED;
 
 #[derive(Debug, Default)]
 pub struct Summary {
@@ -164,7 +164,7 @@ mod tests {
     use std::time::{Instant};
     use log::info;
     use crate::objects::{HotPotatoInfo, SentPacket};
-    use crate::r#const::INITIAL_SPEED;
+    use crate::speed::INITIAL_SPEED;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
     use crate::tests::test_init::initialize_logger;
 

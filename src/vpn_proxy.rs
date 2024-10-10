@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
-use std::sync::mpsc::{channel, Receiver, Sender, SendError, TryRecvError};
+use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
@@ -9,7 +9,8 @@ use crate::throttler::ThrottlerAnalyzer;
 use log::{info, trace};
 use crate::filler::Filler;
 use crate::objects::{ProxyState, RuntimeCommand};
-use crate::r#const::{INITIAL_SPEED, ONE_PACKET_MAX_SIZE};
+use crate::objects::ONE_PACKET_MAX_SIZE;
+use crate::speed::INITIAL_SPEED;
 
 const A_FEW_SPACE : usize = 100;
 const BURNOUT_DELAY: Duration = Duration::from_micros(500);

@@ -70,7 +70,7 @@ mod tests {
     use rand::rngs::ThreadRng;
     use serial_test::serial;
     use crate::orchestrator::Orchestrator;
-    use crate::r#const::INITIAL_SPEED;
+    use crate::speed::INITIAL_SPEED;
     use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
     use crate::tests::test_init::initialize_logger;
     use super::*;
