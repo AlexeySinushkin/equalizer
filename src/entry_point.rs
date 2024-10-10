@@ -4,9 +4,11 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use log::{error, info};
 use crate::core::vpn_proxy::{VpnProxy};
-use crate::objects::Channel;
+use crate::objects::{FillerChannel, MainChannel};
 
-pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16, ct_vpn: Sender<Channel>, ct_filler: Sender<TcpStream>,
+pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16,
+                    ct_vpn: Sender<MainChannel>,
+                    ct_filler: Sender<FillerChannel>,
                     stop: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
         let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
@@ -28,7 +30,7 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
             }
             match filler_listener.accept() {
                 Ok((stream, _addr)) => {
-                    let result = ct_filler.send(stream);
+                    let result = ct_filler.send(FillerChannel::new(stream));
                     if result.is_err() {
                         error!("Filler's pipe is broken");
                     }
@@ -44,12 +46,12 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
     Ok(join)
 }
 
-fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<Channel> {
+fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<MainChannel> {
     println!("Client connected. Theirs address {:?}", client_stream.peer_addr().unwrap());
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        Ok(Channel::new(result.unwrap(), client_stream))
+        Ok(MainChannel::new(result.unwrap(), client_stream))
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;

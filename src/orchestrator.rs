@@ -6,7 +6,7 @@ use std::ops::{DerefMut};
 use std::sync::mpsc::{Receiver};
 use std::time::{Duration, Instant};
 use log::info;
-use crate::objects::{Channel, ProxyState, RuntimeCommand};
+use crate::objects::{FillerChannel, MainChannel, ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
 use crate::core::vpn_proxy::{Proxy, VpnProxy};
@@ -14,10 +14,10 @@ use crate::core::vpn_proxy::{Proxy, VpnProxy};
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
 
 pub struct Orchestrator {
-    new_proxy_receiver: Receiver<Channel>,
-    new_filler_receiver: Receiver<TcpStream>,
+    new_proxy_receiver: Receiver<MainChannel>,
+    new_filler_receiver: Receiver<FillerChannel>,
     proxy_only: Vec<VpnProxy>,
-    filler_only: Vec<TcpStream>,
+    filler_only: Vec<FillerChannel>,
     pairs: Vec<Box<dyn Proxy>>,
     stat: Box<dyn StatisticCollector>,
     speed_corrector: SpeedCorrector,
@@ -25,11 +25,11 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new_stat(new_proxy_receiver: Receiver<Channel>,
-                    new_filler_receiver: Receiver<TcpStream>,
+    pub fn new_stat(new_proxy_receiver: Receiver<MainChannel>,
+                    new_filler_receiver: Receiver<FillerChannel>,
                     stat: Box<dyn StatisticCollector>) -> Orchestrator {
         let proxy_only: Vec<VpnProxy> = vec![];
-        let filler_only: Vec<TcpStream> = vec![];
+        let filler_only: Vec<FillerChannel> = vec![];
         let pair: Vec<Box<dyn Proxy>> = vec![];
         Self {
             new_proxy_receiver,
@@ -117,13 +117,12 @@ impl Orchestrator {
             //ищем пару
             for i in 0..self.filler_only.len() {
                 let filler = &self.filler_only[i];
-                let filler_key = VpnProxy::get_key(&filler);
-                if proxy.key.eq(&filler_key) {
+                if proxy.key.eq(&filler.key) {
                     info!("Pair {} case1", &proxy.key);
                     let filler = self.filler_only.remove(i);
-                    self.ensure_previous_session_is_destroyed(&filler_key);
+                    self.ensure_previous_session_is_destroyed(&filler.key);
                     let mut proxy = Box::new(proxy);
-                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler)).unwrap();
+                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler.client_stream)).unwrap();
                     self.pairs.push(proxy);
                     return true;
                 }
@@ -137,19 +136,18 @@ impl Orchestrator {
             //ищем пару
             for i in 0..self.proxy_only.len() {
                 let proxy = &self.proxy_only[i];
-                let filler_key = VpnProxy::get_key(&filler);
-                if proxy.key.eq(&filler_key) {
+                if proxy.key.eq(&filler.key) {
                     info!("Pair {} case2", &proxy.key);
                     //self.ensure_previous_session_is_destroyed(&filler_key);
                     let proxy = self.proxy_only.remove(i);
                     let mut proxy = Box::new(proxy);
-                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler)).unwrap();
+                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler.client_stream)).unwrap();
                     self.pairs.push(proxy);
                     return true;
                 }
             }
             //пары еще нет - добавляем в одиночки
-            info!("Filler {} was received ", VpnProxy::get_key(&filler));
+            info!("Filler {} was received ", &filler.key);
             self.filler_only.push(filler);
             return true;
         }

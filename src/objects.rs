@@ -26,15 +26,34 @@ pub struct SentPacket {
 /*
 Главный канал данных
  */
-pub struct Channel {
+pub struct MainChannel {
     pub up_stream: TcpStream,
     pub client_stream: TcpStream,
     pub key: String,
 }
-impl Channel {
-    pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> Channel {
-        let key = Channel::get_key(&client_stream);
+
+
+impl MainChannel {
+    pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> MainChannel {
+        let key = MainChannel::get_key(&client_stream);
         Self {up_stream, client_stream, key}
+    }
+
+    fn get_key(stream: &TcpStream) -> String {
+        stream.peer_addr().unwrap().ip().to_string()
+    }
+}
+
+
+pub struct FillerChannel {
+    pub client_stream: TcpStream,
+    pub key: String,
+}
+
+impl FillerChannel {
+    pub fn new(client_stream: TcpStream) -> FillerChannel {
+        let key = MainChannel::get_key(&client_stream);
+        Self {client_stream, key}
     }
 
     fn get_key(stream: &TcpStream) -> String {
