@@ -17,7 +17,7 @@ pub struct ChangeSpeedRequired {
     pub key: String,
     pub speed: usize,
 }
-
+#[warn(dead_code)]
 struct AvgSpeed {
     data_percent: usize,
     calculated_speed: usize,

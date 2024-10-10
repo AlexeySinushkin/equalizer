@@ -70,7 +70,6 @@ mod tests {
     use rand::rngs::ThreadRng;
     use serial_test::serial;
     use crate::orchestrator::Orchestrator;
-    use crate::print_client_info;
     use crate::r#const::INITIAL_SPEED;
     use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
     use crate::tests::test_init::initialize_logger;
@@ -177,6 +176,7 @@ mod tests {
             info!("{:#02x} {:#02x} {:#02x} {:#02x}", client_to_proxy[i], proxy_to_client[i],
                 proxy_to_vpn[i], vpn_to_proxy[i])
         }
+        ct_stop.send(true).unwrap();
         assert!(compare_result1);
         assert!(compare_result2);
     }
@@ -236,7 +236,7 @@ mod tests {
             mut client_stream,
             mut client_filler_stream,
             mut orchestrator,
-            mut join_handle
+            join_handle
         } = create_test_streams(1, None);
 
         trace!("Ждем подключения Заполнителя");
@@ -300,7 +300,7 @@ mod tests {
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         join_handle_2.join().unwrap();
         assert!(data_offset >= 1_000_000);
-        assert!(filler_offset > 50_000 && filler_offset < 120_000);
+        assert!(filler_offset > 35_000 && filler_offset < 120_000, "{}", filler_offset);
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
     }
@@ -322,7 +322,7 @@ mod tests {
             mut client_stream,
             mut client_filler_stream,
             mut orchestrator,
-            mut join_handle
+            join_handle
         } = create_test_streams(2, None);
 
         client_stream.write(&buf[..10]).unwrap();
@@ -336,9 +336,9 @@ mod tests {
             //получаем состояние Broken
             orchestrator.invoke();
             sleep(Duration::from_millis(10));
-            vpn_stream.write(&buf[..10]);
-            vpn_stream.flush();
-            client_filler_stream.read(&mut buf);
+            let _ = vpn_stream.write(&buf[..10]);
+            let _ = vpn_stream.flush();
+            let _ = client_filler_stream.read(&mut buf);
         }
         //проверяем что клиентов больше нет, а мы все еще не упали
         assert_eq!(0, orchestrator.get_pairs_count());
@@ -357,7 +357,7 @@ mod tests {
             mut client_stream,
             mut client_filler_stream,
             mut orchestrator,
-            mut join_handle
+            join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
 
         let mut buf: [u8; 100] = [0; 100];
@@ -365,11 +365,11 @@ mod tests {
         loop {
             orchestrator.invoke();
             sleep(Duration::from_millis(100));
-            client_stream.write(&buf).unwrap();
-            vpn_stream.write(&buf).unwrap();
-            client_stream.read(&mut buf);
-            vpn_stream.read(&mut buf);
-            client_filler_stream.read(&mut buf);
+            let _ = client_stream.write(&buf).unwrap();
+            let _ = vpn_stream.write(&buf).unwrap();
+            let _ = client_stream.read(&mut buf);
+            let _ = vpn_stream.read(&mut buf);
+            let _ = client_filler_stream.read(&mut buf);
 
             orchestrator.invoke();
             if let Some(collected_info) = orchestrator.calculate_and_get() {

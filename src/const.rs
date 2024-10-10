@@ -6,4 +6,4 @@ pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 pub const INITIAL_SPEED: usize = 1024*1024/1000;
 
-pub const MAX_STAT_COUNT: usize = 100;
+pub const MAX_STAT_COUNT: usize = 10;

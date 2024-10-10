@@ -58,6 +58,7 @@ impl SimpleStatisticCollector {
     }
 }
 
+
 struct CurrentRollingInfo {
     key: String,
     target_speed: usize,
@@ -160,14 +161,19 @@ impl StatisticCollector for SimpleStatisticCollector {
 #[cfg(test)]
 mod tests {
     use std::ops::{Add, Sub};
-    use std::time::{Duration, Instant};
+    use std::time::{Instant};
     use log::info;
     use crate::objects::{CollectedInfo, SentPacket};
     use crate::r#const::INITIAL_SPEED;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
+    use crate::tests::test_init::initialize_logger;
 
+    /*
+    чистится внутренняя очередь, даже если никто данные не потребляет
+     */
     #[test]
     fn simple_statistic_collector_memory_leak() {
+        initialize_logger();
         let mut stat = SimpleStatisticCollector::default();
         let key = "1".to_string();
         let mut old_time = Instant::now().sub(ANALYZE_PERIOD).sub(ANALYZE_PERIOD);
@@ -191,9 +197,43 @@ mod tests {
 
         let client_info = stat.calculate_and_get().unwrap();
         assert_eq!(1, client_info.len());
-        let summery = client_info.get(0).unwrap();
-        assert_eq!(66, summery.percent_data);
-        assert_eq!(33, summery.percent_filler);
-        info!("{:?}", summery);
+        let summary = client_info.get(0).unwrap();
+        assert_eq!(66, summary.percent_data);
+        assert_eq!(33, summary.percent_filler);
+        info!("{:?}", summary);
+    }
+
+    /*
+    Достаточно одного пакета для подсчета
+     */
+    #[test]
+    fn one_packet_statistic() {
+        initialize_logger();
+        let mut stat = SimpleStatisticCollector::default();
+        let key = "1".to_string();
+        let mut old_time = Instant::now().sub(ANALYZE_PERIOD/2);
+
+        let mut collected_info = CollectedInfo::default();
+        collected_info.target_speed = INITIAL_SPEED;
+        collected_info.data_count = 1;
+        collected_info.filler_count = 0;
+        collected_info.data_packets[0] = Some(SentPacket { sent_date: old_time, sent_size: 10_000 });
+        stat.append_info(&key, collected_info);
+
+        let client_info = stat.calculate_and_get().unwrap();
+
+        let summary = client_info.get(0).unwrap();
+        assert_eq!(100, summary.percent_data);
+        info!("{:?}", summary);
+    }
+
+    #[test]
+    fn simple_stat_duplicate() {
+        let mut stat = SimpleStatisticCollector::default();
+        let key = "1".to_string();
+        stat.get_or_create(&key);
+        let key2 = "1".to_string();
+        stat.get_or_create(&key2);
+        assert_eq!(1, stat.collected_info.len());
     }
 }

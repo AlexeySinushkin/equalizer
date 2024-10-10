@@ -196,7 +196,9 @@ impl ThreadWorkingSet{
         }else{
             sleep(BURNOUT_DELAY);
         }
-        self.ct_state.send(ProxyState::Info(filler.clean()))?;
+        if let Some(collected_info) = filler.clean_almost_full() {
+            self.ct_state.send(ProxyState::Info(collected_info))?;
+        }
         if let Ok(command) = self.cr_command.try_recv() {
             match command {
                 RuntimeCommand::SetSpeed(speed) => {
