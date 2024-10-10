@@ -1,7 +1,7 @@
 use std::ops::Sub;
 use std::time::Instant;
 use std::time::Duration;
-use crate::objects::{CollectedInfo, SentPacket};
+use crate::objects::{HotPotatoInfo, SentPacket};
 use crate::r#const::INITIAL_SPEED;
 
 #[derive(Debug, Default)]
@@ -16,7 +16,7 @@ pub struct Summary {
 }
 
 pub trait StatisticCollector {
-    fn append_info(&mut self, key: &String, info: CollectedInfo);
+    fn append_info(&mut self, key: &String, info: HotPotatoInfo);
     fn clear_info(&mut self, key: &String);
     fn calculate_and_get(&mut self) -> Option<Vec<Summary>>;
 }
@@ -27,7 +27,7 @@ pub trait StatisticCollector {
 pub struct NoStatistic;
 
 impl StatisticCollector for NoStatistic {
-    fn append_info(&mut self, _key: &String, _info: CollectedInfo) {}
+    fn append_info(&mut self, _key: &String, _info: HotPotatoInfo) {}
     fn clear_info(&mut self, _key: &String) {}
     fn calculate_and_get(&mut self) -> Option<Vec<Summary>> {
         None
@@ -80,7 +80,7 @@ impl CurrentRollingInfo {
 }
 
 impl StatisticCollector for SimpleStatisticCollector {
-    fn append_info(&mut self, key: &String, stat: CollectedInfo) {
+    fn append_info(&mut self, key: &String, stat: HotPotatoInfo) {
         let instance = self.get_or_create(key);
         for i in 0..stat.data_count {
             instance.data.push(stat.data_packets[i].unwrap());
@@ -163,7 +163,7 @@ mod tests {
     use std::ops::{Add, Sub};
     use std::time::{Instant};
     use log::info;
-    use crate::objects::{CollectedInfo, SentPacket};
+    use crate::objects::{HotPotatoInfo, SentPacket};
     use crate::r#const::INITIAL_SPEED;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
     use crate::tests::test_init::initialize_logger;
@@ -181,7 +181,7 @@ mod tests {
         //добавляем 10 старых пакетов и 10 которые должны идти в расчет
         let increment = ANALYZE_PERIOD/10;
         for _i in 0..20 {
-            let mut collected_info = CollectedInfo::default();
+            let mut collected_info = HotPotatoInfo::default();
             collected_info.target_speed = INITIAL_SPEED;
             collected_info.data_count = 1;
             collected_info.filler_count = 1;
@@ -213,7 +213,7 @@ mod tests {
         let key = "1".to_string();
         let mut old_time = Instant::now().sub(ANALYZE_PERIOD/2);
 
-        let mut collected_info = CollectedInfo::default();
+        let mut collected_info = HotPotatoInfo::default();
         collected_info.target_speed = INITIAL_SPEED;
         collected_info.data_count = 1;
         collected_info.filler_count = 0;

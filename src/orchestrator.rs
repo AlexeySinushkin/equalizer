@@ -173,7 +173,7 @@ mod tests {
     use std::time::Instant;
     use std::time::Duration;
     use log::info;
-    use crate::objects::{CollectedInfo, ProxyState, RuntimeCommand, SentPacket};
+    use crate::objects::{HotPotatoInfo, ProxyState, RuntimeCommand, SentPacket};
     use crate::orchestrator::Orchestrator;
     use crate::r#const::INITIAL_SPEED;
     use crate::speed::native_to_regular;
@@ -196,7 +196,7 @@ mod tests {
         }
 
         fn try_recv_state(&mut self) -> Result<ProxyState, TryRecvError> {
-            let mut collected_info = CollectedInfo::default();
+            let mut collected_info = HotPotatoInfo::default();
             //50мс назад отправили 2 пакета
             //один данных, один - заполнитель
             //данных 10Кб, заполнитель 5Кб

@@ -6,7 +6,7 @@
 */
 use std::ops::Sub;
 use std::time::{Duration, Instant};
-use crate::objects::{CollectedInfo, Packet, SentPacket};
+use crate::objects::{HotPotatoInfo, Packet, SentPacket};
 use crate::r#const::{MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 
 const ANALYZE_PERIOD_MS: u64 = 100;
@@ -71,7 +71,7 @@ impl Filler {
         self.queue.push(SentPacketType::new_filler(amount));
     }
 
-    pub fn clean_almost_full(&mut self) -> Option<CollectedInfo> {
+    pub fn clean_almost_full(&mut self) -> Option<HotPotatoInfo> {
         let now = Instant::now();
         let old_threshold = now.sub(OLD_AGE);
         let mut data_count = 0;
@@ -98,10 +98,10 @@ impl Filler {
     /*
     очищаем информацию о пакетах, которые старше 100мс
      */
-    pub fn clean(&mut self) -> CollectedInfo {
+    pub fn clean(&mut self) -> HotPotatoInfo {
         let now = Instant::now();
         let old_threshold = now.sub(OLD_AGE);
-        let mut result = CollectedInfo::default();
+        let mut result = HotPotatoInfo::default();
 
 
         while let Some(pack) = self.queue.first() {
