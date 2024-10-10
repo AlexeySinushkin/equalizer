@@ -1,8 +1,6 @@
 use std::net::TcpStream;
 
 use std::time::Instant;
-use crate::core::vpn_proxy::VpnProxy;
-
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
 pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
 pub const MAX_STAT_COUNT: usize = 10;
@@ -23,43 +21,7 @@ pub struct SentPacket {
     pub sent_size: usize,
 }
 
-/*
-Главный канал данных
- */
-pub struct MainChannel {
-    pub up_stream: TcpStream,
-    pub client_stream: TcpStream,
-    pub key: String,
-}
 
-
-impl MainChannel {
-    pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> MainChannel {
-        let key = MainChannel::get_key(&client_stream);
-        Self {up_stream, client_stream, key}
-    }
-
-    fn get_key(stream: &TcpStream) -> String {
-        stream.peer_addr().unwrap().ip().to_string()
-    }
-}
-
-
-pub struct FillerChannel {
-    pub client_stream: TcpStream,
-    pub key: String,
-}
-
-impl FillerChannel {
-    pub fn new(client_stream: TcpStream) -> FillerChannel {
-        let key = MainChannel::get_key(&client_stream);
-        Self {client_stream, key}
-    }
-
-    fn get_key(stream: &TcpStream) -> String {
-        stream.peer_addr().unwrap().ip().to_string()
-    }
-}
 
 
 /*

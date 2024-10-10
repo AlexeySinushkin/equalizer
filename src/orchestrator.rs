@@ -2,14 +2,15 @@
 //собирает статистику по ним и отправляет в анализатор изменения скорости
 
 use std::net::TcpStream;
-use std::ops::{DerefMut};
-use std::sync::mpsc::{Receiver};
+use std::ops::DerefMut;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 use log::info;
-use crate::objects::{FillerChannel, MainChannel, ProxyState, RuntimeCommand};
+use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
 use crate::core::vpn_proxy::{Proxy, VpnProxy};
+use crate::entry::entry_point::{FillerChannel, MainChannel};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
 
@@ -177,7 +178,7 @@ mod tests {
     use crate::speed::INITIAL_SPEED;
     use crate::speed::native_to_regular;
     use crate::statistic::SimpleStatisticCollector;
-    use crate::core::vpn_proxy::{Proxy};
+    use crate::core::vpn_proxy::Proxy;
 
     struct TestProxy {
         key: String,

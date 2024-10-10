@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use log::LevelFilter;
 use simplelog::{Config, SimpleLogger};
-use crate::entry_point::start_listen;
+use entry::entry_point::start_listen;
 
 
 use crate::orchestrator::Orchestrator;
@@ -14,12 +14,13 @@ use crate::speed::native_to_regular;
 use crate::statistic::{SimpleStatisticCollector, Summary};
 
 mod objects;
-mod entry_point;
 mod tests;
 mod orchestrator;
 mod statistic;
 mod speed;
 mod core;
+mod entry;
+
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();
