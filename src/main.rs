@@ -51,7 +51,7 @@ To run as service /absolute_path/equalizer 11194 1194 11196 --service
     let proxy_listen_port: u16 = *&args.get(1).unwrap().parse().unwrap();
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let filler_listen_port: u16 = *&args.get(3).unwrap().parse().unwrap();
-    let service_mode: bool = args.len()<5 && args.get(4).unwrap().eq("--service"); //TODO to use some lib
+    let service_mode: bool = args.len()>4 && args.get(4).unwrap().eq("--service"); //TODO to use some lib
 
     let (ct_vpn, cr_vpn) = channel();
     let (ct_filler, cr_filler) = channel();

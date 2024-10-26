@@ -6,7 +6,7 @@ use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
-use log::info;
+use log::{info, warn};
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
@@ -153,6 +153,7 @@ impl Orchestrator {
             for i in 0..self.pairs.len() {
                 let pair = self.pairs[i].deref_mut();
                 if pair.get_key().eq(&filler.key) {
+                    warn!("{} client connection rejected (Already connected)", &filler.key);
                     let result = filler.client_stream.write(FAILED_TO_CONNECT);
                     if result.is_ok() {
                         let _ = filler.client_stream.shutdown(Shutdown::Both);
