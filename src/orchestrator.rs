@@ -1,11 +1,12 @@
 //владеет всеми инстансами VpnProxy
 //собирает статистику по ним и отправляет в анализатор изменения скорости
 
-use std::net::TcpStream;
-use std::ops::DerefMut;
+use std::io::Write;
+use std::net::{Shutdown, TcpStream};
+use std::ops::{Deref, DerefMut};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
-use log::info;
+use log::{info, warn};
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
@@ -13,6 +14,7 @@ use crate::core::vpn_proxy::{Proxy, VpnProxy};
 use crate::entry::entry_point::{FillerChannel, MainChannel};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
+const FAILED_TO_CONNECT : &[u8] = "Already connected...".as_bytes();
 
 pub struct Orchestrator {
     new_proxy_receiver: Receiver<MainChannel>,
@@ -133,8 +135,8 @@ impl Orchestrator {
             self.proxy_only.push(proxy);
             return true;
         }
-        if let Ok(filler) = self.new_filler_receiver.try_recv() {
-            //ищем пару
+        if let Ok(mut filler) = self.new_filler_receiver.try_recv() {
+            //ищем ему пару
             for i in 0..self.proxy_only.len() {
                 let proxy = &self.proxy_only[i];
                 if proxy.key.eq(&filler.key) {
@@ -147,12 +149,25 @@ impl Orchestrator {
                     return true;
                 }
             }
+            //проверяем по ключу не повторное ли это подключение
+            for i in 0..self.pairs.len() {
+                let pair = self.pairs[i].deref_mut();
+                if pair.get_key().eq(&filler.key) {
+                    warn!("{} client connection rejected (Already connected)", &filler.key);
+                    let result = filler.client_stream.write(FAILED_TO_CONNECT);
+                    if result.is_ok() {
+                        let _ = filler.client_stream.shutdown(Shutdown::Both);
+                    }
+                    return false;
+                }
+            }
+
             //пары еще нет - добавляем в одиночки
             info!("Filler {} was received ", &filler.key);
             self.filler_only.push(filler);
             return true;
         }
-        return false;
+        false
     }
 
     fn ensure_previous_session_is_destroyed(&mut self, key: &String) {

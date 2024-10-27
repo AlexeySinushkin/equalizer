@@ -43,18 +43,21 @@ do
  nc 127.0.0.1 11196 > /dev/null
  sleep 5
 done
+
+To run as service /absolute_path/equalizer 11194 1194 11196 --service
 ");
         return;
     }
     let proxy_listen_port: u16 = *&args.get(1).unwrap().parse().unwrap();
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let filler_listen_port: u16 = *&args.get(3).unwrap().parse().unwrap();
+    let service_mode: bool = args.len()>4 && args.get(4).unwrap().eq("--service"); //TODO to use some lib
 
     let (ct_vpn, cr_vpn) = channel();
     let (ct_filler, cr_filler) = channel();
     let (_ct_stop, cr_stop) = channel();
     let join = start_listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler, cr_stop).unwrap();
-    thread::spawn(|| {
+    thread::spawn(move || {
         let pause = Duration::from_millis(50);
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
                                                       Box::new(SimpleStatisticCollector::default()));
@@ -63,9 +66,11 @@ done
             sleep(pause);
             orchestrator.invoke();
             sleep(pause);
-            orchestrator.invoke();
-            if let Some(collected_info) = orchestrator.calculate_and_get() {
-                print_client_info(collected_info);
+            if !service_mode {
+                orchestrator.invoke();
+                if let Some(collected_info) = orchestrator.calculate_and_get() {
+                    print_client_info(collected_info);
+                }
             }
         }
     });
@@ -78,7 +83,7 @@ fn print_client_info(collected_info: Vec<Summary>) {
         for client in collected_info.iter() {
             let calculated_speed = native_to_regular(client.calculated_speed);
             let target_speed = native_to_regular(client.target_speed);
-            let stat_line = format!("\r{}- {:02}% / {:02}% {} / {}\t",
+            let stat_line = format!("\r{}- {:03}% / {:03}% {} / {}\t",
                                     client.key,
                                     client.percent_data,
                                     client.percent_filler,

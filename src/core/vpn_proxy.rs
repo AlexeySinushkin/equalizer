@@ -42,6 +42,7 @@ impl Proxy for VpnProxy {
 }
 
 struct ThreadWorkingSet{
+    key: String,
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
     //входящее подклчюение от клиента
@@ -53,10 +54,7 @@ struct ThreadWorkingSet{
 }
 
 impl VpnProxy {
-    /**
-    Создаем поток по чтению запросов от клиента
-    и поток внутри дросселя для отправки данных (лимитированных по скорости)
-     */
+
     pub fn new(client_stream: TcpStream, up_stream: TcpStream) -> VpnProxy {
         let key = VpnProxy::get_key(&client_stream);
         let (ct_command, cr_command) = channel();
@@ -67,6 +65,7 @@ impl VpnProxy {
         up_stream.set_read_timeout(Some(timeout)).expect("Архитектура подразумевает не блокирующий метод чтения");
 
         let thread_working_set = ThreadWorkingSet {
+            key: key.clone(),
             cr_command,
             ct_state,
             client_stream,
@@ -88,7 +87,7 @@ impl VpnProxy {
 }
 
 impl ThreadWorkingSet{
-    pub fn thread_start(mut proxy: ThreadWorkingSet) -> JoinHandle<()> {
+    pub fn thread_start(mut instance: ThreadWorkingSet) -> JoinHandle<()> {
         return thread::Builder::new()
             .name("client_stream".to_string()).spawn(move || {
             let mut filler_stream: TcpStream;
@@ -96,7 +95,7 @@ impl ThreadWorkingSet{
             //цикл, который не использует заполнитель, а работает в режиме ожидания его появления
             info!("Filler-less mode start");
             loop {
-                match proxy.exchange_loop_pre_filler() {
+                match instance.exchange_loop_pre_filler() {
                     Ok(filler) => {
                         match filler {
                             Some(filler) => {
@@ -107,8 +106,8 @@ impl ThreadWorkingSet{
                         }
                     }
                     Err(_) => {
-                        let _ = proxy.ct_state.send(ProxyState::Broken).unwrap();
-                        proxy.client_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.ct_state.send(ProxyState::Broken).unwrap();
+                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
                         return;
                     }
                 }
@@ -117,19 +116,20 @@ impl ThreadWorkingSet{
             //цикл который использует заполнитель
             let mut filler = Filler::new(INITIAL_SPEED);
             let mut throttler = ThrottlerAnalyzer::new(INITIAL_SPEED);
-            proxy.ct_state.send(ProxyState::SetupComplete).unwrap();
+            instance.ct_state.send(ProxyState::SetupComplete).unwrap();
             info!("Filler stream is attached");
             loop {
-                match proxy.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
+                match instance.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
                     Err(_) => {
-                        let _ = proxy.ct_state.send(ProxyState::Broken);
-                        proxy.client_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.ct_state.send(ProxyState::Broken);
+                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
                         filler_stream.shutdown(Shutdown::Both).unwrap();
-                        return;
+                        break;
                     }
                     Ok(_) =>{}
                 }
             }
+            info!("Exit from thread {}", instance.key)
         }).expect("client_stream");
     }
     
