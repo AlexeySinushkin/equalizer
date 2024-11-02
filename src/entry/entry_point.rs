@@ -66,7 +66,7 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
                 Ok((stream, _addr)) => {
                     let result = ct_filler.send(FillerChannel::new(stream));
                     if result.is_err() {
-                        error!("Filler's pipe is broken");
+                        error!("Filler's pipe is broken {:?}", result.err().unwrap());
                     }
                 }
                 _=>{}
