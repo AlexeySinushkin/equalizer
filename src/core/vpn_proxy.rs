@@ -107,7 +107,7 @@ impl ThreadWorkingSet{
                     }
                     Err(_) => {
                         let _ = instance.ct_state.send(ProxyState::Broken).unwrap();
-                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.client_stream.shutdown(Shutdown::Both);
                         return;
                     }
                 }
