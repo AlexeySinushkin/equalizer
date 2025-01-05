@@ -122,8 +122,8 @@ impl ThreadWorkingSet{
                 match instance.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
                     Err(_) => {
                         let _ = instance.ct_state.send(ProxyState::Broken);
-                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
-                        filler_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.client_stream.shutdown(Shutdown::Both);
+                        let _ = filler_stream.shutdown(Shutdown::Both);
                         break;
                     }
                     Ok(_) =>{}

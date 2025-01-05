@@ -43,7 +43,7 @@ impl FillerChannel {
 pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16,
                     ct_vpn: Sender<MainChannel>,
                     ct_filler: Sender<FillerChannel>,
-                    stop: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
+                    stop_application_request: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
         let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
         client_listener.set_nonblocking(true).expect("TODO: panic message");
@@ -71,7 +71,7 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
                 }
                 _=>{}
             }
-            if let Ok(_) = stop.try_recv(){
+            if let Ok(_) = stop_application_request.try_recv(){
                 break;
             }
             sleep(sleep_ms);
