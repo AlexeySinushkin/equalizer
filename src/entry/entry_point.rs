@@ -81,11 +81,11 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
 }
 
 fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<MainChannel> {
-    println!("Client connected. Theirs address {:?}", client_stream.peer_addr().unwrap());
+    println!("Client connected. Theirs address {:?}", client_stream.peer_addr()?);
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        Ok(MainChannel::new(result.unwrap(), client_stream))
+        Ok(MainChannel::new(result?, client_stream))
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;
