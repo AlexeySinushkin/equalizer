@@ -43,7 +43,7 @@ impl FillerChannel {
 pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: u16,
                     ct_vpn: Sender<MainChannel>,
                     ct_filler: Sender<FillerChannel>,
-                    stop: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
+                    stop_application_request: Receiver<bool>) -> std::thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
         let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port)).expect("bind to client port");
         client_listener.set_nonblocking(true).expect("TODO: panic message");
@@ -66,12 +66,12 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
                 Ok((stream, _addr)) => {
                     let result = ct_filler.send(FillerChannel::new(stream));
                     if result.is_err() {
-                        error!("Filler's pipe is broken");
+                        error!("Filler's pipe is broken {:?}", result.err().unwrap());
                     }
                 }
                 _=>{}
             }
-            if let Ok(_) = stop.try_recv(){
+            if let Ok(_) = stop_application_request.try_recv(){
                 break;
             }
             sleep(sleep_ms);
@@ -81,11 +81,11 @@ pub fn start_listen(client_accept_port: u16, vpn_server_port: u16, filler_port: 
 }
 
 fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<MainChannel> {
-    println!("Client connected. Theirs address {:?}", client_stream.peer_addr().unwrap());
+    println!("Client connected. Theirs address {:?}", client_stream.peer_addr()?);
     let result = TcpStream::connect(format!("127.0.0.1:{}", vpn_server_port));
     if result.is_ok() {
         info!("Connected to the VPN server!");
-        Ok(MainChannel::new(result.unwrap(), client_stream))
+        Ok(MainChannel::new(result?, client_stream))
     } else {
         error!("Couldn't connect to VPN server...");
         client_stream.shutdown(Shutdown::Both)?;

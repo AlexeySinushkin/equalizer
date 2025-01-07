@@ -1,0 +1,9 @@
+[Unit]
+Description=Equalizer Service
+
+[Service]
+Environment="RUST_MIN_STACK=104857600"
+ExecStart=/home/user/equalizer/target/release/equalizer 11194 1194 11196 --service
+
+[Install]
+WantedBy=multi-user.target

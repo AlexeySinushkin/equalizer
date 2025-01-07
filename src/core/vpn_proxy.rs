@@ -1,10 +1,11 @@
 use std::error::Error;
+use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::core::throttler::ThrottlerAnalyzer;
 use log::{info, trace};
 use crate::core::filler::Filler;
@@ -84,6 +85,7 @@ impl VpnProxy {
     pub fn get_key(stream: &TcpStream) -> String {
         stream.peer_addr().unwrap().ip().to_string()
     }
+
 }
 
 impl ThreadWorkingSet{
@@ -107,7 +109,7 @@ impl ThreadWorkingSet{
                     }
                     Err(_) => {
                         let _ = instance.ct_state.send(ProxyState::Broken).unwrap();
-                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.client_stream.shutdown(Shutdown::Both);
                         return;
                     }
                 }
@@ -122,8 +124,8 @@ impl ThreadWorkingSet{
                 match instance.exchange_with_filler(&mut filler_stream, &mut filler, &mut throttler) {
                     Err(_) => {
                         let _ = instance.ct_state.send(ProxyState::Broken);
-                        instance.client_stream.shutdown(Shutdown::Both).unwrap();
-                        filler_stream.shutdown(Shutdown::Both).unwrap();
+                        let _ = instance.client_stream.shutdown(Shutdown::Both);
+                        let _ = filler_stream.shutdown(Shutdown::Both);
                         break;
                     }
                     Ok(_) =>{}
