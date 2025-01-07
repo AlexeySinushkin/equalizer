@@ -52,8 +52,6 @@ struct ThreadWorkingSet{
     up_stream: TcpStream,
     //временный буфер
     buf: [u8; ONE_PACKET_MAX_SIZE],
-    vpn_log: File,
-    vpn_log_written_size: usize
 }
 
 impl VpnProxy {
@@ -74,9 +72,6 @@ impl VpnProxy {
             client_stream,
             up_stream,
             buf: [0; ONE_PACKET_MAX_SIZE],
-            //подсмотреть открытый ключ для синхронизации с филлером
-            vpn_log: File::create(Self::get_file_name()).unwrap(),
-            vpn_log_written_size:0
         };
 
         ThreadWorkingSet::thread_start(thread_working_set);
@@ -91,22 +86,6 @@ impl VpnProxy {
         stream.peer_addr().unwrap().ip().to_string()
     }
 
-    fn get_file_name()->String{
-        // Get the current system time
-        let now = SystemTime::now();
-
-        // Compute the time elapsed since the Unix Epoch
-        match now.duration_since(UNIX_EPOCH) {
-            Ok(duration) => {
-                let seconds = duration.as_secs();
-                format!("/tmp/vpn-log-{}.bin", seconds)
-            }
-            Err(_) => {
-                // Handle errors, which occur if `now` is earlier than `UNIX_EPOCH`
-                panic!("System time is before the Unix Epoch");
-            }
-        }
-    }
 }
 
 impl ThreadWorkingSet{
@@ -163,11 +142,6 @@ impl ThreadWorkingSet{
                 //перенаправляем его VPN серверу
                 trace!("->> {}", size);
                 self.up_stream.write_all(&self.buf[..size])?;
-                if self.vpn_log_written_size<1024*1024 {
-                    self.vpn_log.write_all(&self.buf[..size])?;
-                }else{
-                    self.vpn_log.sync_data()?;
-                }
             }
         }
         if let Ok(size) = self.up_stream.read(&mut self.buf) {
@@ -198,11 +172,6 @@ impl ThreadWorkingSet{
                 //перенаправляем его VPN серверу
                 trace!("->> {}", size);
                 self.up_stream.write_all(&self.buf[..size])?;
-                if self.vpn_log_written_size<1024*1024 {
-                    self.vpn_log.write_all(&self.buf[..size])?;
-                }else{
-                    self.vpn_log.sync_data()?;
-                }
             }
         }
         //если есть место
