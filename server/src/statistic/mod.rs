@@ -166,14 +166,14 @@ mod tests {
     use crate::objects::{HotPotatoInfo, SentPacket};
     use crate::speed::INITIAL_SPEED;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
-    use crate::tests::test_init::initialize_logger;
+
 
     /*
     чистится внутренняя очередь, даже если никто данные не потребляет
      */
     #[test]
     fn simple_statistic_collector_memory_leak() {
-        initialize_logger();
+        //initialize_logger();
         let mut stat = SimpleStatisticCollector::default();
         let key = "1".to_string();
         let mut old_time = Instant::now().sub(ANALYZE_PERIOD).sub(ANALYZE_PERIOD);
@@ -208,7 +208,7 @@ mod tests {
      */
     #[test]
     fn one_packet_statistic() {
-        initialize_logger();
+        //initialize_logger();
         let mut stat = SimpleStatisticCollector::default();
         let key = "1".to_string();
         let mut old_time = Instant::now().sub(ANALYZE_PERIOD/2);

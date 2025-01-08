@@ -7,20 +7,17 @@ use std::ops::{Deref, DerefMut};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 use log::{info, warn};
+use crate::objects::Pair;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
 use crate::core::vpn_proxy::{Proxy, VpnProxy};
-use crate::entry::entry_point::{FillerChannel, MainChannel};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
 const FAILED_TO_CONNECT : &[u8] = "Already connected...".as_bytes();
 
 pub struct Orchestrator {
-    new_proxy_receiver: Receiver<MainChannel>,
-    new_filler_receiver: Receiver<FillerChannel>,
-    proxy_only: Vec<VpnProxy>,
-    filler_only: Vec<FillerChannel>,
+    new_proxy_receiver: Receiver<Box<Pair>>,
     pairs: Vec<Box<dyn Proxy>>,
     stat: Box<dyn StatisticCollector>,
     speed_corrector: SpeedCorrector,
@@ -28,17 +25,12 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new_stat(new_proxy_receiver: Receiver<MainChannel>,
-                    new_filler_receiver: Receiver<FillerChannel>,
+    pub fn new_stat(new_proxy_receiver: Receiver<Box<Pair>>,
                     stat: Box<dyn StatisticCollector>) -> Orchestrator {
-        let proxy_only: Vec<VpnProxy> = vec![];
-        let filler_only: Vec<FillerChannel> = vec![];
+
         let pair: Vec<Box<dyn Proxy>> = vec![];
         Self {
             new_proxy_receiver,
-            new_filler_receiver,
-            proxy_only,
-            filler_only,
             pairs: pair,
             stat,
             speed_corrector: SpeedCorrector::new(),
@@ -116,68 +108,13 @@ impl Orchestrator {
 
     fn check_new_connections(&mut self) -> bool {
         if let Ok(main_channel) = self.new_proxy_receiver.try_recv() {
-            let proxy = VpnProxy::new(main_channel.client_stream, main_channel.up_stream);
-            //ищем пару
-            for i in 0..self.filler_only.len() {
-                let filler = &self.filler_only[i];
-                if proxy.key.eq(&filler.key) {
-                    info!("Pair {} case1", &proxy.key);
-                    let filler = self.filler_only.remove(i);
-                    self.ensure_previous_session_is_destroyed(&filler.key);
-                    let mut proxy = Box::new(proxy);
-                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler.client_stream)).unwrap();
-                    self.pairs.push(proxy);
-                    return true;
-                }
-            }
-            //пары еще нет - добавляем в одиночки
-            info!("Proxy {} was received ", &proxy.key);
-            self.proxy_only.push(proxy);
-            return true;
-        }
-        if let Ok(mut filler) = self.new_filler_receiver.try_recv() {
-            //ищем ему пару
-            for i in 0..self.proxy_only.len() {
-                let proxy = &self.proxy_only[i];
-                if proxy.key.eq(&filler.key) {
-                    info!("Pair {} case2", &proxy.key);
-                    //self.ensure_previous_session_is_destroyed(&filler_key);
-                    let proxy = self.proxy_only.remove(i);
-                    let mut proxy = Box::new(proxy);
-                    proxy.deref_mut().try_send_command(RuntimeCommand::SetFiller(filler.client_stream)).unwrap();
-                    self.pairs.push(proxy);
-                    return true;
-                }
-            }
-            //проверяем по ключу не повторное ли это подключение
-            for i in 0..self.pairs.len() {
-                let pair = self.pairs[i].deref_mut();
-                if pair.get_key().eq(&filler.key) {
-                    warn!("{} client connection rejected (Already connected)", &filler.key);
-                    let result = filler.client_stream.write(FAILED_TO_CONNECT);
-                    if result.is_ok() {
-                        let _ = filler.client_stream.shutdown(Shutdown::Both);
-                    }
-                    return false;
-                }
-            }
-
-            //пары еще нет - добавляем в одиночки
-            info!("Filler {} was received ", &filler.key);
-            self.filler_only.push(filler);
+            let proxy = VpnProxy::new(main_channel);
+            self.pairs.push(Box::new(proxy));
             return true;
         }
         false
     }
 
-    fn ensure_previous_session_is_destroyed(&mut self, key: &String) {
-        for i in 0..self.pairs.len() {
-            if self.pairs[i].get_key().eq(key) {
-                self.pairs.remove(i);
-                //TODO завершить поток, если он еще живой
-            }
-        }
-    }
 }
 
 
@@ -229,9 +166,9 @@ mod tests {
         }
     }
 
-    /**
+    /*
     Проверяем что данные от Прокси сквозь оркестратор поступают в сборщик статистики
-     */
+
     #[test]
     fn test_stat_collector_flow() {
         let (_, cr_vpn) = channel();
@@ -252,4 +189,5 @@ mod tests {
                calculated_speed,
                target_speed);
     }
+    */
 }

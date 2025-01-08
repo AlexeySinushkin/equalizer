@@ -3,5 +3,5 @@
     Если кто-то из них отваливается - завершаем работу инстанса
  */
 pub mod vpn_proxy;
-mod throttler;
-mod filler;
+pub mod throttler;
+pub mod filler;

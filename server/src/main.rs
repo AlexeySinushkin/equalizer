@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::{env, thread};
 use std::io::Write;
 use std::sync::mpsc::channel;
@@ -16,21 +14,19 @@ use crate::speed::native_to_regular;
 use crate::statistic::{SimpleStatisticCollector, Summary};
 
 mod objects;
-mod tests;
 mod orchestrator;
 mod statistic;
 mod speed;
-mod core;
 mod entry;
+mod core;
 
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();
     if args.len() < 4 {
-        println!("Example usage: ./equalizer 11194 1194 11196");
+        println!("Example usage: ./equalizer 11194 1194");
         println!("11194 - to accept vpn clients");
         println!("1194 - OpenVPN listening port (tcp)");
-        println!("11196 - to accept filler clients");
         print!("
 On client side
 ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
@@ -52,16 +48,14 @@ To run as service /absolute_path/equalizer 11194 1194 11196 --service
     }
     let proxy_listen_port: u16 = *&args.get(1).unwrap().parse().unwrap();
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
-    let filler_listen_port: u16 = *&args.get(3).unwrap().parse().unwrap();
-    let service_mode: bool = args.len()>4 && args.get(4).unwrap().eq("--service"); //TODO to use some lib
+    let service_mode: bool = args.len()>3 && args.get(3).unwrap().eq("--service"); //TODO to use some lib
 
-    let (ct_vpn, cr_vpn) = channel();
-    let (ct_filler, cr_filler) = channel();
+    let (ct_pair, cr_pair) = channel();
     let (_ct_stop, cr_stop) = channel();
-    let join = start_listen(proxy_listen_port, vpn_listen_port, filler_listen_port, ct_vpn, ct_filler, cr_stop).unwrap();
+    let join = start_listen(proxy_listen_port, vpn_listen_port, ct_pair, cr_stop).unwrap();
     thread::spawn(move || {
         let pause = Duration::from_millis(50);
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, cr_filler,
+        let mut orchestrator = Orchestrator::new_stat(cr_pair,
                                                       Box::new(SimpleStatisticCollector::default()));
         loop{
             orchestrator.invoke();

@@ -1,3 +1,4 @@
+use std::io;
 use std::net::TcpStream;
 
 use std::time::Instant;
@@ -21,7 +22,25 @@ pub struct SentPacket {
     pub sent_size: usize,
 }
 
+pub trait DataStream : Send {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+    fn shutdown(&mut self);
+}
 
+/**
+Главный канал данных
+ */
+pub struct Pair {
+    //от эквалайзера к впн серверу
+    pub up_stream: Box<dyn DataStream>,
+    //от впн клиента к эквалайзеру
+    pub client_stream: Box<dyn DataStream>,
+    //от клиента к эквалайзеру (для получения данных-заполнителя)
+    pub filler_stream: Box<dyn DataStream>,
+    pub key: String,
+}
 
 
 /*
