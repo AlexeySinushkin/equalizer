@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::{env, thread};
 use std::io::Write;
 use std::sync::mpsc::channel;
