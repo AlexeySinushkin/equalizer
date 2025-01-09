@@ -33,15 +33,17 @@ pub struct SpeedCorrector {
 impl SpeedCorrector {
     pub fn new() -> SpeedCorrector {
         Self {
-            collected_info: HashMap::new()
+            collected_info: HashMap::new(),
         }
     }
 
     /**
     Precondition: данные приходят хронологически от старых к новым
     */
-    pub fn append_and_get(&mut self, client_info: Vec<Summary>) -> Option<Vec<ChangeSpeedRequired>>
-    {
+    pub fn append_and_get(
+        &mut self,
+        client_info: Vec<Summary>,
+    ) -> Option<Vec<ChangeSpeedRequired>> {
         for info in client_info.into_iter() {
             self.append_info(info)
         }
@@ -69,10 +71,10 @@ impl SpeedCorrector {
         //удаляем данные старше 5 секунд
         let old_threshold = now.sub(OLD_DATA);
         while let Some(first) = collected_info.first() {
-            if first.from<old_threshold{
+            if first.from < old_threshold {
                 collected_info.remove(0);
             } else {
-              break;
+                break;
             }
         }
     }

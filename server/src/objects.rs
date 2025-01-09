@@ -1,18 +1,19 @@
 use std::io;
-use std::net::TcpStream;
-
 use std::time::Instant;
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
 pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
 pub const MAX_STAT_COUNT: usize = 10;
 pub struct Packet {
     pub size: usize,
-    pub buf: [u8; ONE_PACKET_MAX_SIZE]
+    pub buf: [u8; ONE_PACKET_MAX_SIZE],
 }
 
 impl Packet {
     pub fn new_packet(size: usize) -> Self {
-        Self{size, buf: [0; ONE_PACKET_MAX_SIZE] }
+        Self {
+            size,
+            buf: [0; ONE_PACKET_MAX_SIZE],
+        }
     }
 }
 
@@ -22,7 +23,7 @@ pub struct SentPacket {
     pub sent_size: usize,
 }
 
-pub trait DataStream : Send {
+pub trait DataStream: Send {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
@@ -41,7 +42,6 @@ pub struct Pair {
     pub filler_stream: Box<dyn DataStream>,
     pub key: String,
 }
-
 
 /*
 Информация о пакетах которые были отправлены только-что
@@ -71,13 +71,12 @@ impl Default for HotPotatoInfo {
 
 //команды в сторону прокси (управление)
 pub enum RuntimeCommand {
-    SetFiller(TcpStream),
-    SetSpeed(usize)
+    SetSpeed(usize),
 }
 
 //информация о состоянии прокси
 pub enum ProxyState {
     SetupComplete,
     Info(HotPotatoInfo),
-    Broken
+    Broken,
 }

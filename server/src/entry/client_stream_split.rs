@@ -1,9 +1,8 @@
-
-use std::{io};
+use crate::objects::DataStream;
+use log::warn;
+use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
-use log::warn;
-use crate::objects::{DataStream, Pair};
 
 const HEADER_SIZE: usize = 4;
 const MAX_PACKET_SIZE: usize = 10 * 1024;
@@ -16,8 +15,6 @@ const LENGTH_BYTE_LSB_INDEX: usize = 2;
 const LENGTH_BYTE_MSB_INDEX: usize = 3;
 const DATA_BYTE_INDEX: usize = HEADER_SIZE;
 
-
-
 pub struct ClientDataStream {
     client_stream: TcpStream,
     buf: [u8; BUFFER_SIZE],
@@ -27,7 +24,6 @@ pub struct FillerDataStream {
     client_stream: TcpStream,
 }
 
-
 impl ClientDataStream {
     pub(crate) fn new(client_stream: TcpStream) -> ClientDataStream {
         Self {
@@ -36,7 +32,7 @@ impl ClientDataStream {
         }
     }
 
-    fn calculate_packet_size(&mut self, offset:usize)-> io::Result<usize> {
+    fn calculate_packet_size(&mut self, offset: usize) -> io::Result<usize> {
         if offset >= DATA_BYTE_INDEX {
             let packet_size = self.buf[LENGTH_BYTE_LSB_INDEX] as usize
                 + (self.buf[LENGTH_BYTE_MSB_INDEX] as usize) * 256;
@@ -50,14 +46,14 @@ impl ClientDataStream {
 }
 
 impl DataStream for ClientDataStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
         panic!("Всегда отправляем всё, что есть в канал данных.")
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         //так как мы знаем что 1 пакет подсистемы дросселирования меньше чем один пакет wrapper-а,
         // то смело ассертим и не паримся
-        let mut head_buf : [u8; HEADER_SIZE] = [0; HEADER_SIZE];
+        let mut head_buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
         head_buf[0] = FIRST_BYTE;
         head_buf[1] = TYPE_DATA;
         let packet_size = buf.len() as u16;
@@ -120,7 +116,6 @@ impl DataStream for ClientDataStream {
     }
 }
 
-
 impl FillerDataStream {
     pub(crate) fn new(client_stream: TcpStream) -> FillerDataStream {
         Self { client_stream }
@@ -129,7 +124,7 @@ impl FillerDataStream {
 
 impl DataStream for FillerDataStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut head_buf : [u8; HEADER_SIZE] = [0; HEADER_SIZE];
+        let mut head_buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
         head_buf[0] = FIRST_BYTE;
         head_buf[1] = TYPE_FILLER;
         let packet_size = buf.len() as u16;

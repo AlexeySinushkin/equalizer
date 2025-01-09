@@ -1,18 +1,17 @@
-use log::{error, info, warn};
-use std::fmt::Debug;
-use std::io::{BufReader, ErrorKind, Read, Write};
+use crate::entry::client_stream_split::{ClientDataStream, FillerDataStream};
+use crate::objects::{DataStream, Pair};
+use log::{error, info};
+use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
-use std::{io, thread};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use crate::entry::client_stream_split::{ClientDataStream, FillerDataStream};
-use crate::objects::{DataStream, Pair};
+use std::{io, thread};
 
 pub fn start_listen(
     client_accept_port: u16,
     vpn_server_port: u16,
-    ct_pair: Sender<Box<Pair>>,
+    ct_pair: Sender<Pair>,
     stop_application_request: Receiver<bool>,
 ) -> thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
@@ -27,7 +26,7 @@ pub fn start_listen(
             match client_listener.accept() {
                 Ok((stream, _addr)) => {
                     if let Ok(vpn_proxy) = handle_client(stream, vpn_server_port) {
-                        let result = ct_pair.send(Box::new(vpn_proxy));
+                        let result = ct_pair.send(vpn_proxy);
                         if result.is_err() {
                             error!("VPN pipe is broken");
                         }
@@ -63,11 +62,17 @@ fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<P
 impl Pair {
     pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> Pair {
         let timeout = Duration::from_millis(1);
-        client_stream.set_read_timeout(Some(timeout)).expect("Архитектура подразумевает не блокирующий метод чтения");
-        up_stream.set_read_timeout(Some(timeout)).expect("Архитектура подразумевает не блокирующий метод чтения");
+        client_stream
+            .set_read_timeout(Some(timeout))
+            .expect("Архитектура подразумевает не блокирующий метод чтения");
+        up_stream
+            .set_read_timeout(Some(timeout))
+            .expect("Архитектура подразумевает не блокирующий метод чтения");
         let client_stream = split_tcp_stream(client_stream);
         Pair {
-            up_stream: Box::new(VpnStream { vpn_stream: up_stream }),
+            up_stream: Box::new(VpnStream {
+                vpn_stream: up_stream,
+            }),
             client_stream: client_stream.0,
             filler_stream: client_stream.1,
             key: SystemTime::now()
@@ -81,7 +86,7 @@ impl Pair {
 }
 
 struct VpnStream {
-    vpn_stream: TcpStream
+    vpn_stream: TcpStream,
 }
 impl DataStream for VpnStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -107,5 +112,8 @@ fn split_tcp_stream(client_stream_param: TcpStream) -> (Box<dyn DataStream>, Box
     let filler_stream = client_stream_param
         .try_clone()
         .expect("Failed to clone TcpStream");
-    (Box::new(ClientDataStream::new(client_stream)), Box::new(FillerDataStream::new(filler_stream)))
+    (
+        Box::new(ClientDataStream::new(client_stream)),
+        Box::new(FillerDataStream::new(filler_stream)),
+    )
 }

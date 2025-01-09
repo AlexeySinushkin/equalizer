@@ -1,14 +1,13 @@
+use crate::objects::SentPacket;
 use std::ops::Sub;
-use crate::objects::{SentPacket};
 use std::time::{Duration, Instant};
 
 const ANALYZE_PERIOD_MS: usize = 100;
 
-
 pub struct ThrottlerAnalyzer {
     queue: Vec<SentPacket>,
     //сколько байт мы можем отправить максимум за ANALYZE_PERIOD_MS (100мс)
-    period_capacity: usize
+    period_capacity: usize,
 }
 
 impl ThrottlerAnalyzer {
@@ -16,16 +15,22 @@ impl ThrottlerAnalyzer {
 
     pub fn new(speed: usize) -> ThrottlerAnalyzer {
         let queue: Vec<SentPacket> = Vec::new();
-        let period_capacity = speed*ANALYZE_PERIOD_MS;
-        Self { queue, period_capacity}
+        let period_capacity = speed * ANALYZE_PERIOD_MS;
+        Self {
+            queue,
+            period_capacity,
+        }
     }
 
-    pub fn set_speed(&mut self, speed: usize){
-        self.period_capacity = speed*ANALYZE_PERIOD_MS;
+    pub fn set_speed(&mut self, speed: usize) {
+        self.period_capacity = speed * ANALYZE_PERIOD_MS;
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
-        self.queue.push(SentPacket { sent_date: Instant::now(), sent_size: amount });
+        self.queue.push(SentPacket {
+            sent_date: Instant::now(),
+            sent_size: amount,
+        });
     }
 
     /**
@@ -58,17 +63,17 @@ impl ThrottlerAnalyzer {
 
 #[cfg(test)]
 mod tests {
-    use std::thread::sleep;
     use super::*;
+    use std::thread::sleep;
 
     #[test]
     fn analyzer_test() {
         /*
-         при разрешенной скорости 1024 байта в 1мс
-         добавляем 90 пакетов размером в 1024 байт
-         get_available_space() - должен вернуть 10240
-         спустя 10мс get_available_space() - должен вернуть 124 или больше
-         */
+        при разрешенной скорости 1024 байта в 1мс
+        добавляем 90 пакетов размером в 1024 байт
+        get_available_space() - должен вернуть 10240
+        спустя 10мс get_available_space() - должен вернуть 124 или больше
+        */
         let mut analyzer = ThrottlerAnalyzer::new(1024);
         //между первым и остальными пакетами пауза 10мс
         for i in 0..90 {
@@ -85,5 +90,4 @@ mod tests {
         let space = analyzer.get_available_space();
         assert!(space >= 10_000);
     }
-
 }

@@ -1,23 +1,19 @@
 //владеет всеми инстансами VpnProxy
 //собирает статистику по ним и отправляет в анализатор изменения скорости
 
-use std::io::Write;
-use std::net::{Shutdown, TcpStream};
-use std::ops::{Deref, DerefMut};
-use std::sync::mpsc::Receiver;
-use std::time::{Duration, Instant};
-use log::{info, warn};
+use crate::core::vpn_proxy::{Proxy, VpnProxy};
 use crate::objects::Pair;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::speed_correction::SpeedCorrector;
 use crate::statistic::{StatisticCollector, Summary};
-use crate::core::vpn_proxy::{Proxy, VpnProxy};
+use log::info;
+use std::ops::DerefMut;
+use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
 
 pub const SPEED_CORRECTION_INVOKE_PERIOD: Duration = Duration::from_millis(100);
-const FAILED_TO_CONNECT : &[u8] = "Already connected...".as_bytes();
-
 pub struct Orchestrator {
-    new_proxy_receiver: Receiver<Box<Pair>>,
+    new_proxy_receiver: Receiver<Pair>,
     pairs: Vec<Box<dyn Proxy>>,
     stat: Box<dyn StatisticCollector>,
     speed_corrector: SpeedCorrector,
@@ -25,9 +21,10 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub fn new_stat(new_proxy_receiver: Receiver<Box<Pair>>,
-                    stat: Box<dyn StatisticCollector>) -> Orchestrator {
-
+    pub fn new_stat(
+        new_proxy_receiver: Receiver<Pair>,
+        stat: Box<dyn StatisticCollector>,
+    ) -> Orchestrator {
         let pair: Vec<Box<dyn Proxy>> = vec![];
         Self {
             new_proxy_receiver,
@@ -38,9 +35,8 @@ impl Orchestrator {
         }
     }
 
-
     pub fn invoke(&mut self) {
-        loop  {
+        loop {
             if !self.check_new_connections() {
                 break;
             }
@@ -84,10 +80,12 @@ impl Orchestrator {
     fn send_statistic_to_speed_correction(&mut self) {
         if self.last_speed_correction_invoke.elapsed() >= SPEED_CORRECTION_INVOKE_PERIOD {
             if let Some(summary) = self.stat.calculate_and_get() {
-                if let Some(commands) = self.speed_corrector.append_and_get(summary){
+                if let Some(commands) = self.speed_corrector.append_and_get(summary) {
                     for command in commands.into_iter() {
-                        if let Some(proxy) = self.get_by_key(&command.key){
-                            proxy.try_send_command(RuntimeCommand::SetSpeed(command.speed)).unwrap()
+                        if let Some(proxy) = self.get_by_key(&command.key) {
+                            proxy
+                                .try_send_command(RuntimeCommand::SetSpeed(command.speed))
+                                .unwrap()
                         }
                     }
                 }
@@ -100,7 +98,7 @@ impl Orchestrator {
         for i in 0..self.pairs.len() {
             let proxy = self.pairs[i].deref_mut();
             if proxy.get_key().eq(key) {
-                return Some(&mut self.pairs[i])
+                return Some(&mut self.pairs[i]);
             }
         }
         None
@@ -114,23 +112,21 @@ impl Orchestrator {
         }
         false
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Sub;
-    use std::sync::mpsc::{channel, SendError, TryRecvError};
-    use std::time::Instant;
-    use std::time::Duration;
-    use log::info;
-    use crate::objects::{HotPotatoInfo, ProxyState, RuntimeCommand, SentPacket};
-    use crate::orchestrator::Orchestrator;
-    use crate::speed::INITIAL_SPEED;
-    use crate::speed::native_to_regular;
-    use crate::statistic::SimpleStatisticCollector;
     use crate::core::vpn_proxy::Proxy;
+    use crate::objects::{HotPotatoInfo, ProxyState, RuntimeCommand, SentPacket};
+    
+    
+    use crate::speed::INITIAL_SPEED;
+    
+    
+    use std::ops::Sub;
+    use std::sync::mpsc::{SendError, TryRecvError};
+    use std::time::Duration;
+    use std::time::Instant;
 
     struct TestProxy {
         key: String,
@@ -138,7 +134,9 @@ mod tests {
 
     impl TestProxy {
         pub fn new() -> TestProxy {
-            Self { key: "1".to_string() }
+            Self {
+                key: "1".to_string(),
+            }
         }
     }
 
@@ -156,12 +154,21 @@ mod tests {
             collected_info.target_speed = INITIAL_SPEED;
             collected_info.data_count = 1;
             collected_info.filler_count = 1;
-            collected_info.data_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 10_000 });
-            collected_info.filler_packets[0] = Some(SentPacket { sent_date: fifty_ms_ago, sent_size: 5_000 });
+            collected_info.data_packets[0] = Some(SentPacket {
+                sent_date: fifty_ms_ago,
+                sent_size: 10_000,
+            });
+            collected_info.filler_packets[0] = Some(SentPacket {
+                sent_date: fifty_ms_ago,
+                sent_size: 5_000,
+            });
             Ok(ProxyState::Info(collected_info))
         }
 
-        fn try_send_command(&mut self, _command: RuntimeCommand) -> Result<(), SendError<RuntimeCommand>> {
+        fn try_send_command(
+            &mut self,
+            _command: RuntimeCommand,
+        ) -> Result<(), SendError<RuntimeCommand>> {
             Ok(())
         }
     }
