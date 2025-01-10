@@ -1,5 +1,5 @@
-mod server_side_split;
-mod client_side_split;
+pub mod server_side_split;
+pub mod client_side_split;
 mod packet;
 mod tests;
 
@@ -14,7 +14,7 @@ pub trait DataStream: Send {
 }
 
 pub struct Split {
-    data_stream: Box<dyn DataStream>,
-    filler_stream: Box<dyn DataStream>,
+    pub data_stream: Box<dyn DataStream>,
+    pub filler_stream: Box<dyn DataStream>,
 }
 

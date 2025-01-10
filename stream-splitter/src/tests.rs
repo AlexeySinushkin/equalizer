@@ -79,13 +79,14 @@ mod tests {
         thread::spawn(move || {
             let mut stream = client_listener.accept().expect("client connected").0;
             let head_buf = create_packet_header(TYPE_DATA, 1000);
-            stream.write_all(&head_buf[..2]);
+            stream.write_all(&head_buf[..2]).unwrap();
+            stream.flush().unwrap();
             sleep(Duration::from_millis(10));
-            stream.write_all(&head_buf[2..]);
+            stream.write_all(&head_buf[2..]).unwrap();
             let mut buf = [0; 100];
             buf[0] = 1;
-            for i in 0..10 {
-                stream.write_all(&buf);
+            for _i in 0..10 {
+                stream.write_all(&buf).unwrap();
                 sleep(Duration::from_millis(3));
             }
         });
@@ -94,7 +95,7 @@ mod tests {
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 11112)).unwrap();
         let mut split = split_client_stream(client_stream);
         let mut buf = [0; 1000];
-        split.data_stream.read(&mut buf).expect("read data");
+        let _ = split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(1u8, buf[900]);
     }
 }
