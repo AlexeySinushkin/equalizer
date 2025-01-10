@@ -14,6 +14,7 @@ use crate::statistic::{SimpleStatisticCollector, Summary};
 
 mod core;
 mod entry;
+mod tests;
 mod objects;
 mod orchestrator;
 mod speed;
