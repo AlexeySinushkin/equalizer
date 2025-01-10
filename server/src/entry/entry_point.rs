@@ -91,7 +91,8 @@ struct VpnStream {
 }
 impl DataStream for VpnStream {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.vpn_stream.write_all(buf)
+        self.vpn_stream.write_all(buf)?;
+        self.vpn_stream.flush()
     }
 
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {

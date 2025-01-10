@@ -4,8 +4,10 @@ use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::INITIAL_SPEED;
-use log::{info, trace};
+use log::{info, trace, warn};
 use std::error::Error;
+use std::fs::File;
+use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -84,9 +86,10 @@ impl ThreadWorkingSet {
                 let mut filler = Filler::new(INITIAL_SPEED);
                 let mut throttler = ThrottlerAnalyzer::new(INITIAL_SPEED);
                 instance.ct_state.send(ProxyState::SetupComplete).unwrap();
+                let mut to_server = File::create("target/proxy-to-server.bin").unwrap();
                 info!("Client thread started");
                 loop {
-                    match instance.exchange_with_filler(&mut filler, &mut throttler) {
+                    match instance.exchange_with_filler(&mut filler, &mut throttler, &mut to_server) {
                         Err(_) => {
                             let _ = instance.ct_state.send(ProxyState::Broken);
                             let _ = instance.pair.client_stream.shutdown();
@@ -105,14 +108,17 @@ impl ThreadWorkingSet {
         &mut self,
         filler: &mut Filler,
         throttler: &mut ThrottlerAnalyzer,
+        to_server: &mut File,
     ) -> Result<(), Box<dyn Error>> {
         //GET запрос на чтение нового видоса
-        if let Ok(size) = self.pair.client_stream.read(&mut self.buf) {
-            if size > 0 {
-                //перенаправляем его VPN серверу
-                trace!("->> {}", size);
-                self.pair.up_stream.write_all(&self.buf[..size])?;
-            }
+        let size= self.pair.client_stream.read(&mut self.buf)?;
+        if size > 0 {
+            //перенаправляем его VPN серверу
+            //trace!("->> {}", size);
+            to_server.write_all(&self.buf[..size])?;
+            self.pair.up_stream.write_all(&self.buf[..size])?;
+        }else{
+            warn!("READ ZERO")
         }
         //если есть место
         let mut available_space = throttler.get_available_space();
@@ -123,14 +129,14 @@ impl ThreadWorkingSet {
             if let Ok(size) = self.pair.up_stream.read(&mut self.buf[..available_space]) {
                 //если есть, добавляем в дроссель
                 if size > 0 {
-                    trace!("=>> {}", size);
+                    //trace!("=>> {}", size);
                     self.pair.client_stream.write_all(&self.buf[..size])?;
                     throttler.data_was_sent(size);
                     filler.data_was_sent(size);
                 }
             } else {
                 if let Some(packet) = filler.get_fill_bytes() {
-                    trace!("=>> filler {}", packet.size);
+                    //trace!("=>> filler {}", packet.size);
                     self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
                     filler.filler_was_sent(packet.size);
                 }

@@ -46,10 +46,10 @@ mod tests {
         thread::spawn(move || {
             let stream = client_listener.accept().expect("client connected");
             let mut split = split_server_stream(stream.0);
-            split.data_stream.write_all(b"12345").expect("write data");
-            split.filler_stream.write_all(b"54321").expect("write filler");
-            split.filler_stream.write_all(b"23456").expect("write filler");
-            split.data_stream.write_all(b"65432").expect("write data");
+            split.data_stream.write_all(b"11111").expect("write data");
+            split.filler_stream.write_all(b"22222").expect("write filler");
+            split.filler_stream.write_all(b"33333").expect("write filler");
+            split.data_stream.write_all(b"44444").expect("write data");
         });
         thread::sleep(std::time::Duration::from_millis(100));
 
@@ -57,17 +57,17 @@ mod tests {
         let mut split = split_client_stream(client_stream);
         let mut buf = [0; 10];
         split.data_stream.read(&mut buf).expect("read data");
-        assert_eq!(b"12345", &buf[..5]);
+        assert_eq!(b"11111", &buf[..5]);
         split.filler_stream.read(&mut buf).expect("read filler");
-        assert_eq!(b"54321", &buf[..5]);
+        assert_eq!(b"22222", &buf[..5]);
 
         let no_date_size = split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(0, no_date_size, "Не должно быть данных");
 
         split.filler_stream.read(&mut buf).expect("read filler");
-        assert_eq!(b"23456", &buf[..5]);
+        assert_eq!(b"33333", &buf[..5]);
         split.data_stream.read(&mut buf).expect("read data");
-        assert_eq!(b"65432", &buf[..5]);
+        assert_eq!(b"44444", &buf[..5]);
     }
 
     #[test]

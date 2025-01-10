@@ -1,8 +1,9 @@
+use std::fs::File;
 use crate::packet::*;
 use crate::{DataStream, Split};
-use log::debug;
+use log::{debug};
 use std::io;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::net::{Shutdown, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
@@ -28,7 +29,8 @@ pub struct ClientDataStream {
     //временный буфер в который получаем и заголовок и тело
     temp_buf: Buffer,
     cr: Receiver<QueuedPacket>,
-    ct: Sender<QueuedPacket>
+    ct: Sender<QueuedPacket>,
+    to_server: File
 }
 
 pub struct FillerDataStream {
@@ -45,15 +47,14 @@ impl ClientDataStream {
             temp_buf: [0; BUFFER_SIZE],
             cr,
             ct,
+            to_server: File::create("target/data-from-client.bin").unwrap()
         }
     }
 }
 
 impl DataStream for ClientDataStream {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let head_buf = create_packet_header(TYPE_DATA, buf.len());
-        self.client_stream.write(&head_buf)?;
-        self.client_stream.write_all(buf)
+        write_packet(buf, TYPE_DATA, &mut self.client_stream)
     }
 
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
@@ -61,18 +62,19 @@ impl DataStream for ClientDataStream {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
         }
-        let packet_size = read_packet(&mut self.temp_buf, &mut self.client_stream)?;
-        if packet_size>0 {
-            //проверяем соответствие
-            if self.temp_buf[TYPE_BYTE_INDEX] == TYPE_DATA {
+        if let Some(packet_info) = read_packet(&mut self.temp_buf, &mut self.client_stream)?{
+            let ReadPacketInfo{packet_type, packet_size} = packet_info;
+            if packet_type == TYPE_DATA {
                 dst[..packet_size]
-                    .copy_from_slice(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
-                return Ok(packet_size);
-            } else {
+                    .copy_from_slice(&self.temp_buf[.. packet_size]);
+                return Ok(packet_info.packet_size);
+            } else if packet_type == TYPE_FILLER {
                 debug!("Получили пакет заполнителя в методе получения данных");
-                let packet_body = QueuedPacket::copy_from(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
+                let packet_body = QueuedPacket::copy_from(&self.temp_buf[.. packet_size]);
                 self.ct.send(packet_body)
                     .expect("Alive channel");
+            } else {
+                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
             }
         }
         Ok(0)
@@ -103,17 +105,19 @@ impl DataStream for FillerDataStream {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
         }
-        let packet_size = read_packet(&mut self.temp_buf, &mut self.client_stream)?;
-        if  packet_size>0 {
-            //проверяем соответствие
-            if self.temp_buf[TYPE_BYTE_INDEX] == TYPE_FILLER {
+        if let Some(packet_info) = read_packet(&mut self.temp_buf, &mut self.client_stream)?{
+            let ReadPacketInfo{packet_type, packet_size} = packet_info;
+            if packet_type == TYPE_FILLER {
                 dst[..packet_size]
-                    .copy_from_slice(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
-                return Ok(packet_size);
-            } else {
-                debug!("получили пакет данных в методе получения филлера");
-                self.ct.send(QueuedPacket::copy_from(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]))
+                    .copy_from_slice(&self.temp_buf[.. packet_size]);
+                return Ok(packet_info.packet_size);
+            } else if packet_type == TYPE_DATA {
+                debug!("Получили пакет данных в методе получения заполнителя");
+                let packet_body = QueuedPacket::copy_from(&self.temp_buf[.. packet_size]);
+                self.ct.send(packet_body)
                     .expect("Alive channel");
+            } else {
+                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
             }
         }
         Ok(0)

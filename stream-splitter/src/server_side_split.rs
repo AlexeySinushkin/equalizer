@@ -1,6 +1,6 @@
+use std::fs::File;
 use std::io;
-use log::warn;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::net::{Shutdown, TcpStream};
 use crate::{DataStream, Split};
 use crate::packet::*;
@@ -25,7 +25,7 @@ fn shutdown_stream(stream: &TcpStream) {
 
 pub struct ClientDataStream {
     client_stream: TcpStream,
-    buf: [u8; BUFFER_SIZE],
+    from_client: File
 }
 
 pub struct FillerDataStream {
@@ -36,7 +36,7 @@ impl ClientDataStream {
     fn new(client_stream: TcpStream) -> ClientDataStream {
         Self {
             client_stream,
-            buf: [0; BUFFER_SIZE],
+            from_client: File::create("target/data-from-client2.bin").unwrap()
         }
     }
 
@@ -45,22 +45,21 @@ impl ClientDataStream {
 impl DataStream for ClientDataStream {
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        //так как мы знаем что 1 пакет подсистемы дросселирования меньше чем один пакет wrapper-а,
-        // то смело ассертим и не паримся
-        let head_buf = create_packet_header(TYPE_DATA, buf.len());
-        self.client_stream.write(&head_buf)?;
-        self.client_stream.write_all(buf)
+        write_packet(buf, TYPE_DATA, &mut self.client_stream)
     }
 
-    fn read(&mut self, source: &mut [u8]) -> io::Result<usize> {
-        let packet_size = read_packet(&mut self.buf, &mut self.client_stream)?;
-        //проверяем соответствие
-        if self.buf[TYPE_BYTE_INDEX] == TYPE_DATA {
-            source[..packet_size]
-                .copy_from_slice(&self.buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
-            return Ok(packet_size);
-        } else {
-            warn!("Входящий корректный пакет заполнителя, обработка которого еще не реализована")
+    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
+        //self.from_client.write_all(&self.temp_buf[.. packet_size])?;
+        if let Some(packet_info) = read_packet(dst, &mut self.client_stream)?{
+            if packet_info.packet_type == TYPE_DATA {
+                self.from_client.write_all(&dst[.. packet_info.packet_size])?;
+                return Ok(packet_info.packet_size);
+            } else if packet_info.packet_type == TYPE_FILLER {
+                return Err(io::Error::new(ErrorKind::InvalidData,
+                                          "Входящий корректный пакет заполнителя, обработка которого еще не реализована"));
+            } else {
+                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
+            }
         }
         Ok(0)
     }
@@ -78,11 +77,7 @@ impl FillerDataStream {
 
 impl DataStream for FillerDataStream {
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        let head_buf = create_packet_header(TYPE_FILLER, buf.len());
-        self.client_stream.write(&head_buf)?;
-        self.client_stream.write_all(buf)?;
-        self.client_stream.flush()?;
-        Ok(())
+        write_packet(buf, TYPE_FILLER, &mut self.client_stream)
     }
 
     fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {

@@ -9,7 +9,7 @@ pub mod test_init {
     pub fn initialize_logger() {
         INIT.call_once(|| {
             let config = ConfigBuilder::new()
-                .set_time_format_custom(format_description!("[hour]:[minute]:[second].[subsecond]"))
+                .set_time_format_custom(format_description!("[minute]:[second].[subsecond]"))
                 .build();
             SimpleLogger::init(LevelFilter::Trace, config).expect("Логгер проинициализирован");
         });
@@ -18,13 +18,14 @@ pub mod test_init {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
     use std::thread::{sleep, JoinHandle};
     use std::time::{Duration, Instant};
-    use log::{error, info, trace};
+    use log::{error, info, trace, warn};
     use rand::Rng;
     use rand::rngs::ThreadRng;
     use serial_test::serial;
@@ -77,16 +78,16 @@ mod tests {
         //в двух разных потоках отправляем данные случайными порциями от 10 до 2000 за раз.
         //и делая при этом паузы от 10 до 73мс
 
-
+        let client_proxy_stream_clone = client_proxy_stream.try_clone().unwrap();
         let join_handle = thread::Builder::new()
             .name("test_client".to_string()).spawn(move || {
             let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            client_side_write_and_read(client_proxy_stream, &client_to_proxy, &mut proxy_to_vpn,  "clinet");
+            client_side_write_and_read(client_proxy_stream_clone, &client_to_proxy, &mut proxy_to_vpn,  "clinet");
             return proxy_to_vpn;
         }).unwrap();
 
-
-        server_side_write_and_read(proxy_vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
+        let proxy_vpn_stream_clone = proxy_vpn_stream.try_clone().unwrap();
+        server_side_write_and_read(proxy_vpn_stream_clone, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
         let proxy_to_vpn = join_handle.join().unwrap();
 
         let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_client);
@@ -102,55 +103,69 @@ mod tests {
     }
 
     fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str){
+        let mut out_file = File::create("target/client-out.bin").unwrap();
+        let mut in_file = File::create("target/client-in.bin").unwrap();
+
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
         let mut split= split_client_stream(stream);
         let mut stream = split.data_stream;
+        let mut filler = split.filler_stream;
         let mut rng = rand::thread_rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
         let mut iteration = 0;
+        let mut filler_buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
+
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
+            let _ = filler.read(&mut filler_buf);
             //отправляем в поток данные из out_buf
             if write_left_size > 0 {
                 let mut to_send_size: usize = get_amount_to_send_size(&mut rng) as usize;
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
-                if let Ok(()) = stream.write_all(&out_buf[write_offset..write_offset + to_send_size]) {
-                    write_offset += to_send_size;
-                    write_left_size -= to_send_size;
-                    let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                    trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                    iteration += 1;
-                    sleep(sleep_ms);
-                } else {
-                    trace!("{:?} Отправить не удалось ", name);
-                }
+                trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
+                stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
+                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+
+                write_offset += to_send_size;
+                write_left_size -= to_send_size;
+
+                let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
+                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                iteration += 1;
+                sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                trace!("{:?} Собираемся читать", name);
+                //trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
-                    trace!("{:?} Прочитали {:?} ", name, read);
+                    let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
+                    //trace!("{:?} Прочитали {:?} ", name, read);
+                    if read==0 {
+                        sleep(Duration::from_millis(100));
+                    }
                     read_size += read;
                 } else {
-                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
+                    //info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }
-        stream.shutdown();
         trace!("Поток завершён {:?}", thread::current().name());
     }
 
     fn server_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str){
+        let mut out_file = File::create("target/server-out.bin").unwrap();
+        let mut in_file = File::create("target/server-in.bin").unwrap();
+
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
         let mut rng = rand::thread_rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
         let mut iteration = 0;
+
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
             //отправляем в поток данные из out_buf
             if write_left_size > 0 {
@@ -158,30 +173,32 @@ mod tests {
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
-                if let Ok(()) = stream.write_all(&out_buf[write_offset..write_offset + to_send_size]) {
-                    write_offset += to_send_size;
-                    write_left_size -= to_send_size;
-                    let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                    trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                    iteration += 1;
-                    sleep(sleep_ms);
-                } else {
-                    trace!("{:?} Отправить не удалось ", name);
-                }
+                //trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
+                stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
+                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+
+                write_offset += to_send_size;
+                write_left_size -= to_send_size;
+                let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
+                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                iteration += 1;
+                sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                trace!("{:?} Собираемся читать", name);
+                //trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
-                    trace!("{:?} Прочитали {:?} ", name, read);
+                    let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
+                    //trace!("{:?} Прочитали {:?} ", name, read);
+                    if read==0 {
+                        sleep(Duration::from_millis(100));
+                    }
                     read_size += read;
                 } else {
-                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
+                    //info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }
-        let _ = stream.shutdown(Shutdown::Both);
         trace!("Поток завершён {:?}", thread::current().name());
     }
 
