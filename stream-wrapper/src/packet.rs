@@ -1,10 +1,13 @@
 use std::io;
 use std::io::{ErrorKind, Read};
 use std::net::TcpStream;
+use std::thread::sleep;
+use std::time::Duration;
+use log::warn;
 
 pub const HEADER_SIZE: usize = 4;
 pub const MAX_PACKET_SIZE: usize = 10 * 1024;
-pub const BUFFER_SIZE: usize = 10 * 1024 + HEADER_SIZE;
+pub const BUFFER_SIZE: usize = MAX_PACKET_SIZE + HEADER_SIZE;
 pub const FIRST_BYTE: u8 = 0x54;
 pub const TYPE_DATA: u8 = 0x55;
 pub const TYPE_FILLER: u8 = 0x56;
@@ -14,21 +17,39 @@ pub const LENGTH_BYTE_MSB_INDEX: usize = 3;
 pub const DATA_BYTE_INDEX: usize = HEADER_SIZE;
 
 
+pub type Buffer = [u8; BUFFER_SIZE];
 
-pub fn read_packet(buf: &mut [u8], stream: &mut TcpStream) -> io::Result<usize>  {
-    let mut bytes_read: usize = stream.read(&mut buf[..DATA_BYTE_INDEX])?;
+/**
+    В случае если письмо получено не тем получателем
+    пересылаем его упакованным в эту структуру
+*/
+pub struct QueuedPacket {
+    pub buf: Buffer,
+    pub len: usize,
+}
+impl QueuedPacket {
+    pub fn copy_from(buf: &[u8])->QueuedPacket {
+        let mut packet = QueuedPacket{buf: [0; BUFFER_SIZE], len: 0};
+        packet.buf[..buf.len()].copy_from_slice(buf);
+        packet.len = buf.len();
+        packet
+    }
+}
+
+pub fn read_packet(tmp_buf: &mut [u8], stream: &mut TcpStream) -> io::Result<usize>  {
+    let mut bytes_read: usize = stream.read(&mut tmp_buf[..DATA_BYTE_INDEX])?;
     if bytes_read == 0 {
         return Ok(bytes_read);
     }
-    if buf[0] != FIRST_BYTE {
+    if tmp_buf[0] != FIRST_BYTE {
         return Err(io::Error::new(
             ErrorKind::BrokenPipe,
             "Первый байт должен быть маркером",
         ));
     }
 
-    let mut packet_size = calculate_packet_size(buf, bytes_read)?;
-
+    let mut packet_size = calculate_packet_size(tmp_buf, bytes_read)?;
+    let mut loop_counter = 0;
     loop {
         if packet_size > MAX_PACKET_SIZE {
             return Err(io::Error::new(
@@ -37,17 +58,26 @@ pub fn read_packet(buf: &mut [u8], stream: &mut TcpStream) -> io::Result<usize> 
             ));
         }
         if packet_size > 0 {
+            let head_and_body_size = HEADER_SIZE + packet_size;
             //читаем не больше чем надо
             bytes_read += stream
-                .read( &mut buf[bytes_read..packet_size - bytes_read])?;
-            if packet_size + HEADER_SIZE == bytes_read {
+                .read( &mut tmp_buf[bytes_read..head_and_body_size])?;
+            if head_and_body_size == bytes_read {
                 return Ok(packet_size);
             }
-        } else if bytes_read < DATA_BYTE_INDEX {
+        } else if bytes_read < HEADER_SIZE {
             //Вычитываем заголовок (размер пакета)
             bytes_read += stream
-                .read(&mut buf[bytes_read..DATA_BYTE_INDEX - bytes_read])?;
-            packet_size = calculate_packet_size(buf, bytes_read)?;
+                .read(&mut tmp_buf[bytes_read..HEADER_SIZE])?;
+            packet_size = calculate_packet_size(tmp_buf, bytes_read)?;
+        }
+        loop_counter += 1;
+        sleep(Duration::from_millis(5));
+        if loop_counter == 3 {
+            warn!("Получение пакета затянулось ...")
+        }
+        if loop_counter > 1000 {
+            return Err(io::Error::new(ErrorKind::UnexpectedEof, "Слишком долгое получение пакета"));
         }
     }
 }

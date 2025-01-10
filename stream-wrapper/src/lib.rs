@@ -1,6 +1,7 @@
 mod server_side_split;
 mod client_side_split;
 mod packet;
+mod tests;
 
 use std::io;
 

@@ -4,35 +4,47 @@ use log::debug;
 use std::io;
 use std::io::Write;
 use std::net::{Shutdown, TcpStream};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
-fn split_tcp_stream(client_stream_param: TcpStream) -> Split {
+pub fn split_client_stream(client_stream_param: TcpStream) -> Split {
     let client_stream = client_stream_param
         .try_clone()
         .expect("Failed to clone TcpStream");
     let filler_stream = client_stream_param
         .try_clone()
         .expect("Failed to clone TcpStream");
+    //Если в методе read пришел чужой пакет - перенаправляем его получателю
+    let (ct_data, cr_data) = channel();
+    let (ct_filler, cr_filler) = channel();
     Split {
-        data_stream: Box::new(ClientDataStream::new(client_stream)),
-        filler_stream: Box::new(FillerDataStream::new(filler_stream)),
+        data_stream: Box::new(ClientDataStream::new(client_stream, cr_data, ct_filler)),
+        filler_stream: Box::new(FillerDataStream::new(filler_stream, cr_filler, ct_data)),
     }
 }
 
+
 pub struct ClientDataStream {
     client_stream: TcpStream,
-    buf: [u8; BUFFER_SIZE],
+    //временный буфер в который получаем и заголовок и тело
+    temp_buf: Buffer,
+    cr: Receiver<QueuedPacket>,
+    ct: Sender<QueuedPacket>
 }
 
 pub struct FillerDataStream {
     client_stream: TcpStream,
-    buf: [u8; BUFFER_SIZE],
+    temp_buf: Buffer,
+    cr: Receiver<QueuedPacket>,
+    ct: Sender<QueuedPacket>
 }
 
 impl ClientDataStream {
-    fn new(client_stream: TcpStream) -> ClientDataStream {
+    fn new(client_stream: TcpStream, cr: Receiver<QueuedPacket>, ct: Sender<QueuedPacket>) -> ClientDataStream {
         Self {
             client_stream,
-            buf: [0; BUFFER_SIZE],
+            temp_buf: [0; BUFFER_SIZE],
+            cr,
+            ct,
         }
     }
 }
@@ -45,15 +57,22 @@ impl DataStream for ClientDataStream {
     }
 
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
-        let packet_size = read_packet(&mut self.buf, &mut self.client_stream)?;
-        if  packet_size>0 {
+        if let Ok(packet_body) = self.cr.try_recv() {
+            dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
+            return Ok(packet_body.len);
+        }
+        let packet_size = read_packet(&mut self.temp_buf, &mut self.client_stream)?;
+        if packet_size>0 {
             //проверяем соответствие
-            if self.buf[TYPE_BYTE_INDEX] == TYPE_DATA {
+            if self.temp_buf[TYPE_BYTE_INDEX] == TYPE_DATA {
                 dst[..packet_size]
-                    .copy_from_slice(&self.buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
+                    .copy_from_slice(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
                 return Ok(packet_size);
             } else {
-                debug!("Получили пакет заполнителя в методе получения данных")
+                debug!("Получили пакет заполнителя в методе получения данных");
+                let packet_body = QueuedPacket::copy_from(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
+                self.ct.send(packet_body)
+                    .expect("Alive channel");
             }
         }
         Ok(0)
@@ -65,10 +84,11 @@ impl DataStream for ClientDataStream {
 }
 
 impl FillerDataStream {
-    fn new(client_stream: TcpStream) -> FillerDataStream {
+    fn new(client_stream: TcpStream, cr: Receiver<QueuedPacket>, ct: Sender<QueuedPacket>) -> FillerDataStream {
         Self {
             client_stream,
-            buf: [0; BUFFER_SIZE],
+            temp_buf: [0; BUFFER_SIZE],
+            cr, ct
         }
     }
 }
@@ -79,15 +99,21 @@ impl DataStream for FillerDataStream {
     }
 
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
-        let packet_size = read_packet(&mut self.buf, &mut self.client_stream)?;
+        if let Ok(packet_body) = self.cr.try_recv() {
+            dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
+            return Ok(packet_body.len);
+        }
+        let packet_size = read_packet(&mut self.temp_buf, &mut self.client_stream)?;
         if  packet_size>0 {
             //проверяем соответствие
-            if self.buf[TYPE_BYTE_INDEX] == TYPE_FILLER {
+            if self.temp_buf[TYPE_BYTE_INDEX] == TYPE_FILLER {
                 dst[..packet_size]
-                    .copy_from_slice(&self.buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
+                    .copy_from_slice(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]);
                 return Ok(packet_size);
             } else {
-                debug!("получили пакет данных в методе получения филлера")
+                debug!("получили пакет данных в методе получения филлера");
+                self.ct.send(QueuedPacket::copy_from(&self.temp_buf[DATA_BYTE_INDEX..DATA_BYTE_INDEX + packet_size]))
+                    .expect("Alive channel");
             }
         }
         Ok(0)

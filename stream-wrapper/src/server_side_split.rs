@@ -7,7 +7,7 @@ use crate::packet::*;
 
 
 
-fn split_tcp_stream(client_stream: TcpStream) -> Split {
+pub fn split_server_stream(client_stream: TcpStream) -> Split {
     let client_stream_clone = client_stream
         .try_clone()
         .expect("Failed to clone TcpStream");
