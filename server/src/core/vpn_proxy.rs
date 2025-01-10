@@ -131,9 +131,8 @@ impl ThreadWorkingSet {
             } else {
                 if let Some(packet) = filler.get_fill_bytes() {
                     trace!("=>> filler {}", packet.size);
-                    if let Ok(written) = self.pair.filler_stream.write(&packet.buf[..packet.size]) {
-                        filler.filler_was_sent(written);
-                    }
+                    self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
+                    filler.filler_was_sent(packet.size);
                 }
             }
         } else {

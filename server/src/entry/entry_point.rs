@@ -1,5 +1,5 @@
-use crate::entry::client_stream_split::{ClientDataStream, FillerDataStream};
-use crate::objects::{DataStream, Pair};
+use splitter::server_side_split::{split_server_stream, ClientDataStream, FillerDataStream};
+use crate::objects::{Pair};
 use log::{error, info};
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
+use splitter::{DataStream, Split};
 
 pub fn start_listen(
     client_accept_port: u16,
@@ -68,13 +69,13 @@ impl Pair {
         up_stream
             .set_read_timeout(Some(timeout))
             .expect("Архитектура подразумевает не блокирующий метод чтения");
-        let client_stream = split_tcp_stream(client_stream);
+        let split = split_server_stream(client_stream);
         Pair {
             up_stream: Box::new(VpnStream {
                 vpn_stream: up_stream,
             }),
-            client_stream: client_stream.0,
-            filler_stream: client_stream.1,
+            client_stream: split.data_stream,
+            filler_stream: split.filler_stream,
             key: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -89,10 +90,6 @@ struct VpnStream {
     vpn_stream: TcpStream,
 }
 impl DataStream for VpnStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.vpn_stream.write(buf)
-    }
-
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.vpn_stream.write_all(buf)
     }
@@ -105,15 +102,3 @@ impl DataStream for VpnStream {
     }
 }
 
-fn split_tcp_stream(client_stream_param: TcpStream) -> (Box<dyn DataStream>, Box<dyn DataStream>) {
-    let client_stream = client_stream_param
-        .try_clone()
-        .expect("Failed to clone TcpStream");
-    let filler_stream = client_stream_param
-        .try_clone()
-        .expect("Failed to clone TcpStream");
-    (
-        Box::new(ClientDataStream::new(client_stream)),
-        Box::new(FillerDataStream::new(filler_stream)),
-    )
-}

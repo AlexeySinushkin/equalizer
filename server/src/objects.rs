@@ -1,5 +1,7 @@
 use std::io;
 use std::time::Instant;
+use splitter::DataStream;
+
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
 pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
 pub const MAX_STAT_COUNT: usize = 10;
@@ -23,12 +25,6 @@ pub struct SentPacket {
     pub sent_size: usize,
 }
 
-pub trait DataStream: Send {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
-    fn shutdown(&mut self);
-}
 
 /**
 Главный канал данных

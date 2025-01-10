@@ -100,7 +100,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "stream-wrapper"
+name = "stream-splitter"
 version = "0.1.0"
 dependencies = [
  "log",
