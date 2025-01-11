@@ -1,8 +1,8 @@
 #[cfg(test)]
 pub mod test_init {
-    use std::sync::Once;
     use log::LevelFilter;
     use simplelog::{format_description, ConfigBuilder, SimpleLogger};
+    use std::sync::Once;
 
     static INIT: Once = Once::new();
     pub fn initialize_logger() {
@@ -15,19 +15,17 @@ pub mod test_init {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
+    use crate::client_side_split::split_client_stream;
+    use crate::packet::{create_packet_header, TYPE_DATA};
+    use crate::server_side_split::split_server_stream;
+    use crate::tests::test_init::initialize_logger;
     use std::io::Write;
     use std::net::{TcpListener, TcpStream};
     use std::thread;
     use std::thread::sleep;
     use std::time::Duration;
-    use log::info;
-    use crate::client_side_split::split_client_stream;
-    use crate::packet::{create_packet_header, TYPE_DATA};
-    use crate::server_side_split::split_server_stream;
-    use crate::tests::test_init::initialize_logger;
 
     /**
     Сервер после подключения к нему шлет
@@ -40,22 +38,28 @@ mod tests {
     #[test]
     fn all_received_test() {
         initialize_logger();
-        info!("ALL_RECEIVED_TEST");
-        let client_listener = TcpListener::bind(format!("127.0.0.1:{}", 11111))
-            .expect("bind to client port");
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 11111)).expect("bind to client port");
+
         thread::spawn(move || {
             let stream = client_listener.accept().expect("client connected");
             let mut split = split_server_stream(stream.0);
-            split.data_stream.write_all(b"11111").expect("write data");
-            split.filler_stream.write_all(b"22222").expect("write filler");
-            split.filler_stream.write_all(b"33333").expect("write filler");
-            split.data_stream.write_all(b"44444").expect("write data");
+            split.data_stream.write_all(b"11111").expect("write data"); //0x49
+            split
+                .filler_stream
+                .write_all(b"22222")
+                .expect("write filler"); //0x50
+            split
+                .filler_stream
+                .write_all(b"33333")
+                .expect("write filler"); //0x51
+            split.data_stream.write_all(b"44444").expect("write data"); //0x52
         });
         thread::sleep(std::time::Duration::from_millis(100));
 
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 11111)).unwrap();
         let mut split = split_client_stream(client_stream);
-        let mut buf = [0; 10];
+        let mut buf = [0; 5];
         split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(b"11111", &buf[..5]);
         split.filler_stream.read(&mut buf).expect("read filler");
@@ -73,9 +77,8 @@ mod tests {
     #[test]
     fn slow_receive_test() {
         initialize_logger();
-        info!("ALL_RECEIVED_TEST");
-        let client_listener = TcpListener::bind(format!("127.0.0.1:{}", 11112))
-            .expect("bind to client port");
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 11112)).expect("bind to client port");
         thread::spawn(move || {
             let mut stream = client_listener.accept().expect("client connected").0;
             let head_buf = create_packet_header(TYPE_DATA, 1000);

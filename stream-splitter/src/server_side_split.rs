@@ -1,11 +1,9 @@
+use crate::packet::*;
+use crate::{DataStream, Split};
 use std::fs::File;
 use std::io;
 use std::io::{ErrorKind, Write};
 use std::net::{Shutdown, TcpStream};
-use crate::{DataStream, Split};
-use crate::packet::*;
-
-
 
 pub fn split_server_stream(client_stream: TcpStream) -> Split {
     let client_stream_clone = client_stream
@@ -25,7 +23,7 @@ fn shutdown_stream(stream: &TcpStream) {
 
 pub struct ClientDataStream {
     client_stream: TcpStream,
-    from_client: File
+    from_client: File,
 }
 
 pub struct FillerDataStream {
@@ -36,27 +34,28 @@ impl ClientDataStream {
     fn new(client_stream: TcpStream) -> ClientDataStream {
         Self {
             client_stream,
-            from_client: File::create("target/data-from-client2.bin").unwrap()
+            from_client: File::create("target/data-from-client2.bin").unwrap(),
         }
     }
-
 }
 
 impl DataStream for ClientDataStream {
-
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         write_packet(buf, TYPE_DATA, &mut self.client_stream)
     }
 
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
         //self.from_client.write_all(&self.temp_buf[.. packet_size])?;
-        if let Some(packet_info) = read_packet(dst, &mut self.client_stream)?{
+        if let Some(packet_info) = read_packet(dst, &mut self.client_stream)? {
             if packet_info.packet_type == TYPE_DATA {
-                self.from_client.write_all(&dst[.. packet_info.packet_size])?;
+                self.from_client
+                    .write_all(&dst[..packet_info.packet_size])?;
                 return Ok(packet_info.packet_size);
             } else if packet_info.packet_type == TYPE_FILLER {
-                return Err(io::Error::new(ErrorKind::InvalidData,
-                                          "Входящий корректный пакет заполнителя, обработка которого еще не реализована"));
+                return Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    "Входящий корректный пакет заполнителя, обработка которого еще не реализована",
+                ));
             } else {
                 return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
             }

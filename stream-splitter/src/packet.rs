@@ -56,23 +56,31 @@ pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> io::
     let mut head_buf = create_packet_header(packet_type, size);
     stream.write_all(&mut head_buf)?;
     let mut offset = 0;
-    while offset<size {
+    while offset < size {
         offset += stream.write(&buf[offset..size])?;
     }
-    stream.write_all(buf)?;
     stream.flush()
 }
 
-pub fn read_packet(tmp_buf: &mut [u8], stream: &mut TcpStream) -> io::Result<Option<ReadPacketInfo>> {
+pub fn read_packet(
+    tmp_buf: &mut [u8],
+    stream: &mut TcpStream,
+) -> io::Result<Option<ReadPacketInfo>> {
     if let Some(header) = read_header(stream)? {
-        let packet_size = header.packet_size;
+        let Header {
+            packet_size,
+            packet_type,
+        } = header;
         let mut offset: usize = 0;
         let mut loop_counter = 0;
         loop {
             //читаем не больше чем надо
             offset += stream.read(&mut tmp_buf[offset..packet_size])?;
             if offset == packet_size {
-                return Ok(Some(ReadPacketInfo{ packet_size, packet_type: header.packet_type }));
+                return Ok(Some(ReadPacketInfo {
+                    packet_size,
+                    packet_type,
+                }));
             }
             loop_counter += 1;
             sleep(Duration::from_millis(5));
@@ -91,7 +99,7 @@ pub fn read_packet(tmp_buf: &mut [u8], stream: &mut TcpStream) -> io::Result<Opt
 }
 
 fn read_header(stream: &mut TcpStream) -> io::Result<Option<Header>> {
-    let mut header_buf : [u8; HEADER_SIZE] = [0; HEADER_SIZE];
+    let mut header_buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
     let mut offset: usize = 0;
     let mut loop_counter = 0;
     while offset < HEADER_SIZE {
@@ -121,7 +129,7 @@ fn read_header(stream: &mut TcpStream) -> io::Result<Option<Header>> {
             "Недопустимый размер пакета",
         ));
     }
-    Ok(Some(Header{
+    Ok(Some(Header {
         packet_type: header_buf[TYPE_BYTE_INDEX],
         packet_size,
     }))
@@ -129,7 +137,8 @@ fn read_header(stream: &mut TcpStream) -> io::Result<Option<Header>> {
 
 fn calculate_packet_size(buf: &[u8], offset: usize) -> io::Result<usize> {
     if offset >= DATA_BYTE_INDEX {
-        let packet_size: usize = ((buf[LENGTH_BYTE_MSB_INDEX] as usize) <<8) | buf[LENGTH_BYTE_LSB_INDEX] as usize;
+        let packet_size: usize =
+            ((buf[LENGTH_BYTE_MSB_INDEX] as usize) << 8) | buf[LENGTH_BYTE_LSB_INDEX] as usize;
         if packet_size == 0 {
             return Err(io::Error::new(ErrorKind::BrokenPipe, "Тело пакета == 0"));
         }
