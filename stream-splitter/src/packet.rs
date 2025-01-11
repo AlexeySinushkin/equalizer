@@ -1,10 +1,9 @@
 use log::warn;
-use std::io;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::thread::sleep;
 use std::time::Duration;
-
+use easy_error::{bail, Error, ResultExt};
 /*
    0x54[1], тип[1], размер[2]
 */
@@ -51,21 +50,24 @@ impl QueuedPacket {
     }
 }
 
-pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> io::Result<()> {
+pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> Result<(), Error> {
     let size = buf.len();
     let mut head_buf = create_packet_header(packet_type, size);
-    stream.write_all(&mut head_buf)?;
+    stream.write_all(&mut head_buf)
+        .context("Write header in write_packet")?;
     let mut offset = 0;
     while offset < size {
-        offset += stream.write(&buf[offset..size])?;
+        offset += stream.write(&buf[offset..size])
+            .context("Write data in write_packet")?;
     }
     stream.flush()
+        .context("Flush stream in write_packet")
 }
 
 pub fn read_packet(
     tmp_buf: &mut [u8],
     stream: &mut TcpStream,
-) -> io::Result<Option<ReadPacketInfo>> {
+) -> Result<Option<ReadPacketInfo>, Error> {
     if let Some(header) = read_header(stream)? {
         let Header {
             packet_size,
@@ -75,7 +77,8 @@ pub fn read_packet(
         let mut loop_counter = 0;
         loop {
             //читаем не больше чем надо
-            offset += stream.read(&mut tmp_buf[offset..packet_size])?;
+            offset += stream.read(&mut tmp_buf[offset..packet_size])
+                .context("Packet body read")?;
             if offset == packet_size {
                 return Ok(Some(ReadPacketInfo {
                     packet_size,
@@ -88,46 +91,36 @@ pub fn read_packet(
                 warn!("Получение пакета затянулось ...")
             }
             if loop_counter > 1000 {
-                return Err(io::Error::new(
-                    ErrorKind::UnexpectedEof,
-                    "Слишком долгое получение пакета",
-                ));
+                bail!("Слишком долгое получение пакета")
             }
         }
     }
     Ok(None)
 }
 
-fn read_header(stream: &mut TcpStream) -> io::Result<Option<Header>> {
+fn read_header(stream: &mut TcpStream) -> Result<Option<Header>, Error> {
     let mut header_buf: [u8; HEADER_SIZE] = [0; HEADER_SIZE];
     let mut offset: usize = 0;
     let mut loop_counter = 0;
     while offset < HEADER_SIZE {
-        offset += stream.read(&mut header_buf[offset..HEADER_SIZE])?;
+        offset += stream.read(&mut header_buf[offset..HEADER_SIZE])
+            .context("Header packet read")?;
         if offset == 0 {
             //если при первой попытке ничего не удалось прочить - возможно данных просто нет
             return Ok(None);
         }
         loop_counter += 1;
         if loop_counter > 1000 {
-            return Err(io::Error::new(
-                ErrorKind::UnexpectedEof,
-                "Слишком долгое получение заголовка пакета",
-            ));
+            bail!("Слишком долгое получение заголовка пакета")
         }
     }
     if header_buf[0] != FIRST_BYTE {
-        return Err(io::Error::new(
-            ErrorKind::BrokenPipe,
-            "Первый байт должен быть маркером",
-        ));
+        bail!("Первый байт должен быть маркером");
     }
-    let packet_size = calculate_packet_size(&header_buf, offset)?;
+    let packet_size = calculate_packet_size(&header_buf, offset)
+        .context("Packet size calculation")?;
     if packet_size > MAX_PACKET_SIZE {
-        return Err(io::Error::new(
-            ErrorKind::BrokenPipe,
-            "Недопустимый размер пакета",
-        ));
+        bail!("Недопустимый размер пакета")
     }
     Ok(Some(Header {
         packet_type: header_buf[TYPE_BYTE_INDEX],
@@ -135,12 +128,12 @@ fn read_header(stream: &mut TcpStream) -> io::Result<Option<Header>> {
     }))
 }
 
-fn calculate_packet_size(buf: &[u8], offset: usize) -> io::Result<usize> {
+fn calculate_packet_size(buf: &[u8], offset: usize) -> Result<usize, Error> {
     if offset >= DATA_BYTE_INDEX {
         let packet_size: usize =
             ((buf[LENGTH_BYTE_MSB_INDEX] as usize) << 8) | buf[LENGTH_BYTE_LSB_INDEX] as usize;
         if packet_size == 0 {
-            return Err(io::Error::new(ErrorKind::BrokenPipe, "Тело пакета == 0"));
+            bail!("Тело пакета == 0")
         }
         return Ok(packet_size);
     }

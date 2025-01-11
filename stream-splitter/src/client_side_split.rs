@@ -1,10 +1,9 @@
 use crate::packet::*;
 use crate::{DataStream, Split};
 use log::debug;
-use std::io;
-use std::io::ErrorKind;
 use std::net::{Shutdown, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use easy_error::{bail, Error, ResultExt};
 
 pub fn split_client_stream(client_stream_param: TcpStream) -> Split {
     let client_stream = client_stream_param
@@ -53,11 +52,11 @@ impl ClientDataStream {
 }
 
 impl DataStream for ClientDataStream {
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         write_packet(buf, TYPE_DATA, &mut self.client_stream)
     }
 
-    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
         if let Ok(packet_body) = self.cr.try_recv() {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
@@ -73,9 +72,10 @@ impl DataStream for ClientDataStream {
             } else if packet_type == TYPE_FILLER {
                 debug!("Получили пакет заполнителя в методе получения данных");
                 let packet_body = QueuedPacket::copy_from(&self.temp_buf[..packet_size]);
-                self.ct.send(packet_body).expect("Alive channel");
+                self.ct.send(packet_body)
+                    .context("Alive channel")?;
             } else {
-                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
+                bail!("Мусор в данных")
             }
         }
         Ok(0)
@@ -102,11 +102,11 @@ impl FillerDataStream {
 }
 
 impl DataStream for FillerDataStream {
-    fn write_all(&mut self, _buf: &[u8]) -> io::Result<()> {
-        panic!("Клиент не должен отправлять данных заполнения");
+    fn write_all(&mut self, _buf: &[u8]) -> Result<(), Error> {
+        bail!("Клиент не должен отправлять данных заполнения");
     }
 
-    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
         if let Ok(packet_body) = self.cr.try_recv() {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
@@ -122,9 +122,10 @@ impl DataStream for FillerDataStream {
             } else if packet_type == TYPE_DATA {
                 debug!("Получили пакет данных в методе получения заполнителя");
                 let packet_body = QueuedPacket::copy_from(&self.temp_buf[..packet_size]);
-                self.ct.send(packet_body).expect("Alive channel");
+                self.ct.send(packet_body)
+                    .context("Alive channel")?;
             } else {
-                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
+                bail!( "Мусор в данных")
             }
         }
         Ok(0)

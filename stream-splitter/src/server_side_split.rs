@@ -1,9 +1,9 @@
 use crate::packet::*;
 use crate::{DataStream, Split};
 use std::fs::File;
-use std::io;
-use std::io::{ErrorKind, Write};
+use std::io::{ Write};
 use std::net::{Shutdown, TcpStream};
+use easy_error::{bail, Error, ResultExt};
 
 pub fn split_server_stream(client_stream: TcpStream) -> Split {
     let client_stream_clone = client_stream
@@ -40,24 +40,23 @@ impl ClientDataStream {
 }
 
 impl DataStream for ClientDataStream {
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         write_packet(buf, TYPE_DATA, &mut self.client_stream)
+            .context("Write data packet in server side split")
     }
 
-    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
         //self.from_client.write_all(&self.temp_buf[.. packet_size])?;
         if let Some(packet_info) = read_packet(dst, &mut self.client_stream)? {
             if packet_info.packet_type == TYPE_DATA {
                 self.from_client
-                    .write_all(&dst[..packet_info.packet_size])?;
+                    .write_all(&dst[..packet_info.packet_size])
+                    .context("Write log file")?;
                 return Ok(packet_info.packet_size);
             } else if packet_info.packet_type == TYPE_FILLER {
-                return Err(io::Error::new(
-                    ErrorKind::InvalidData,
-                    "Входящий корректный пакет заполнителя, обработка которого еще не реализована",
-                ));
+                bail!("Входящий корректный пакет заполнителя, обработка которого еще не реализована")
             } else {
-                return Err(io::Error::new(ErrorKind::UnexpectedEof, "Мусор в данных"));
+                bail!("Мусор в данных")
             }
         }
         Ok(0)
@@ -75,12 +74,12 @@ impl FillerDataStream {
 }
 
 impl DataStream for FillerDataStream {
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         write_packet(buf, TYPE_FILLER, &mut self.client_stream)
     }
 
-    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-        panic!("Не должно быть данных заполнения от клиента");
+    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Error> {
+        bail!("Не должно быть данных заполнения от клиента");
     }
 
     fn shutdown(&mut self) {

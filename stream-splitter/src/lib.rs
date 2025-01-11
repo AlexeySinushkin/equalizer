@@ -3,11 +3,11 @@ mod packet;
 pub mod server_side_split;
 mod tests;
 
-use std::io;
+use easy_error::Error;
 
 pub trait DataStream: Send {
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error>;
     fn shutdown(&mut self);
 }
 
