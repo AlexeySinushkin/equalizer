@@ -6,9 +6,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use easy_error::{bail, Error, ResultExt};
 
 pub fn split_client_stream(client_stream_param: TcpStream) -> Split {
-    let client_stream = client_stream_param
-        .try_clone()
-        .expect("Failed to clone TcpStream");
     let filler_stream = client_stream_param
         .try_clone()
         .expect("Failed to clone TcpStream");
@@ -16,7 +13,7 @@ pub fn split_client_stream(client_stream_param: TcpStream) -> Split {
     let (ct_data, cr_data) = channel();
     let (ct_filler, cr_filler) = channel();
     Split {
-        data_stream: Box::new(ClientDataStream::new(client_stream, cr_data, ct_filler)),
+        data_stream: Box::new(ClientDataStream::new(client_stream_param, cr_data, ct_filler)),
         filler_stream: Box::new(FillerDataStream::new(filler_stream, cr_filler, ct_data)),
     }
 }

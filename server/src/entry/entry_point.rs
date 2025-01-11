@@ -7,6 +7,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
+use easy_error::{Error, ResultExt};
 use splitter::{DataStream, Split};
 
 pub fn start_listen(
@@ -90,13 +91,18 @@ struct VpnStream {
     vpn_stream: TcpStream,
 }
 impl DataStream for VpnStream {
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        self.vpn_stream.write_all(buf)?;
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
+        self.vpn_stream.write_all(buf)
+            .context("Server side vpn_stream write")?;
         self.vpn_stream.flush()
+            .context("Server side vpn connection read")?;
+        Ok(())
     }
 
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.vpn_stream.read(buf)
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        let result = self.vpn_stream.read(buf)
+            .context("Server side vpn connection read")?;
+        Ok(result)
     }
     fn shutdown(&mut self) {
         let _ = self.vpn_stream.shutdown(Shutdown::Both);

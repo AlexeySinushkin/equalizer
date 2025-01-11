@@ -6,14 +6,11 @@ use std::net::{Shutdown, TcpStream};
 use easy_error::{bail, Error, ResultExt};
 
 pub fn split_server_stream(client_stream: TcpStream) -> Split {
-    let client_stream_clone = client_stream
-        .try_clone()
-        .expect("Failed to clone TcpStream");
     let filler_stream = client_stream
         .try_clone()
         .expect("Failed to clone TcpStream");
     Split {
-        data_stream: Box::new(ClientDataStream::new(client_stream_clone)),
+        data_stream: Box::new(ClientDataStream::new(client_stream)),
         filler_stream: Box::new(FillerDataStream::new(filler_stream)),
     }
 }

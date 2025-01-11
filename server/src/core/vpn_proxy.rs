@@ -112,15 +112,13 @@ impl ThreadWorkingSet {
         to_server: &mut File,
     ) -> Result<(), Error> {
         //GET запрос на чтение нового видоса
-        let size= self.pair.client_stream.read(&mut self.buf[..])
-            .context("Read data from client stream")?;
+        let size= self.pair.client_stream.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
             //trace!("->> {}", size);
             to_server.write_all(&self.buf[..size])
                 .context("Binary log")?;
-            self.pair.up_stream.write_all(&self.buf[..size])
-                .context("Send data through vpn stream")?;
+            self.pair.up_stream.write_all(&self.buf[..size])?;
         }else{
             warn!("READ ZERO")
         }
@@ -134,16 +132,14 @@ impl ThreadWorkingSet {
                 //если есть, добавляем в дроссель
                 if size > 0 {
                     //trace!("=>> {}", size);
-                    self.pair.client_stream.write_all(&self.buf[..size])
-                        .context("Send data through client stream")?;
+                    self.pair.client_stream.write_all(&self.buf[..size])?;
                     throttler.data_was_sent(size);
                     filler.data_was_sent(size);
                 }
             } else {
                 if let Some(packet) = filler.get_fill_bytes() {
                     //trace!("=>> filler {}", packet.size);
-                    self.pair.filler_stream.write_all(&packet.buf[..packet.size])
-                        .context("Send data through filler stream")?;
+                    self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
                     filler.filler_was_sent(packet.size);
                 }
             }

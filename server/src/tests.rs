@@ -67,28 +67,33 @@ mod tests {
         //Создаем 2 массива по 1MB заполняем случайными данными
         //А также 2 пустых массива по 1МБ для приемки данных
         let client_proxy_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT)).unwrap();
+        sleep(Duration::from_millis(500));
         let client_to_proxy = get_random_buf();
+        let vpn_to_proxy = get_random_buf();
 
         let proxy_vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
-        let vpn_to_proxy = get_random_buf();
-        let mut proxy_to_client: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-        orchestrator.invoke();
         orchestrator.invoke();
 
         //в двух разных потоках отправляем данные случайными порциями от 10 до 2000 за раз.
         //и делая при этом паузы от 10 до 73мс
 
-        let client_proxy_stream_clone = client_proxy_stream.try_clone().unwrap();
-        let join_handle = thread::Builder::new()
+
+        let join_handle_client = thread::Builder::new()
             .name("test_client".to_string()).spawn(move || {
             let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            client_side_write_and_read(client_proxy_stream_clone, &client_to_proxy, &mut proxy_to_vpn,  "clinet");
+            client_side_write_and_read(client_proxy_stream, &client_to_proxy, &mut proxy_to_vpn,  "client");
             return proxy_to_vpn;
         }).unwrap();
 
-        let proxy_vpn_stream_clone = proxy_vpn_stream.try_clone().unwrap();
-        server_side_write_and_read(proxy_vpn_stream_clone, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
-        let proxy_to_vpn = join_handle.join().unwrap();
+        let join_handle_server = thread::Builder::new()
+            .name("test_vpn".to_string()).spawn(move || {
+            let mut proxy_to_client: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
+            server_side_write_and_read(proxy_vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
+            return proxy_to_client;
+        }).unwrap();
+
+        let proxy_to_vpn = join_handle_client.join().unwrap();
+        let proxy_to_client = join_handle_server.join().unwrap();
 
         let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_client);
         let compare_result2 = compare("vpn->client", &proxy_to_vpn, &vpn_to_proxy);
