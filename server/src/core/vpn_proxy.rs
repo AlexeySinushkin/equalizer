@@ -89,7 +89,7 @@ impl ThreadWorkingSet {
                 let mut to_server = File::create("target/proxy-to-server.bin").unwrap();
                 info!("Client thread started");
                 loop {
-                    match instance.exchange_with_filler(&mut filler, &mut throttler, &mut to_server) {
+                    match instance.main_loop(&mut filler, &mut throttler, &mut to_server) {
                         Err(e) => {
                             error!("{}", e);
                             let _ = instance.ct_state.send(ProxyState::Broken);
@@ -105,7 +105,7 @@ impl ThreadWorkingSet {
             .expect("client_stream");
     }
 
-    fn exchange_with_filler(
+    fn main_loop(
         &mut self,
         filler: &mut Filler,
         throttler: &mut ThrottlerAnalyzer,
@@ -115,10 +115,10 @@ impl ThreadWorkingSet {
         let size= self.pair.client_stream.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
-            //trace!("->> {}", size);
+            trace!("->> {}", size);
+            self.pair.up_stream.write_all(&self.buf[..size])?;
             to_server.write_all(&self.buf[..size])
                 .context("Binary log")?;
-            self.pair.up_stream.write_all(&self.buf[..size])?;
         }
         //если есть место
         let mut available_space = throttler.get_available_space();
@@ -126,20 +126,16 @@ impl ThreadWorkingSet {
             if available_space > ONE_PACKET_MAX_SIZE {
                 available_space = ONE_PACKET_MAX_SIZE;
             }
-            if let Ok(size) = self.pair.up_stream.read(&mut self.buf[..available_space]) {
-                //если есть, добавляем в дроссель
-                if size > 0 {
-                    //trace!("=>> {}", size);
-                    self.pair.client_stream.write_all(&self.buf[..size])?;
-                    throttler.data_was_sent(size);
-                    filler.data_was_sent(size);
-                }
-            } else {
-                if let Some(packet) = filler.get_fill_bytes() {
-                    //trace!("=>> filler {}", packet.size);
-                    self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
-                    filler.filler_was_sent(packet.size);
-                }
+            let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..available_space])?;
+            if vpn_incoming_data_size > 0  {
+                //trace!("=>> {}", vpn_incoming_data_size);
+                self.pair.client_stream.write_all(&self.buf[..vpn_incoming_data_size])?;
+                throttler.data_was_sent(vpn_incoming_data_size);
+                filler.data_was_sent(vpn_incoming_data_size);
+            } else if let Some(packet) = filler.get_fill_bytes() {
+                //trace!("=>> filler {}", packet.size);
+                self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
+                filler.filler_was_sent(packet.size);
             }
         } else {
             sleep(BURNOUT_DELAY);

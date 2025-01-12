@@ -1,7 +1,5 @@
 use crate::packet::*;
 use crate::{DataStream, Split, READ_START_AWAIT_TIMEOUT};
-use std::fs::File;
-use std::io::{ Write};
 use std::net::{Shutdown, TcpStream};
 use easy_error::{bail, Error, ResultExt};
 
