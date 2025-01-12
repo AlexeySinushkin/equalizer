@@ -1,5 +1,5 @@
 use easy_error::{bail, Error, ResultExt};
-use log::{warn};
+use log::{debug, warn};
 use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
@@ -153,9 +153,13 @@ pub(crate) fn read(buf: &mut [u8], stream: &mut TcpStream) -> Result<usize, io::
         Ok(size) => Ok(size),
         Err(e) => {
             match e.kind() {
-                ErrorKind::NotFound => Ok(0),
+                ErrorKind::WouldBlock => Ok(0),
                 ErrorKind::TimedOut => Ok(0),
-                _ => Err(e)
+                _ => {
+                    debug!("{}", e.kind());
+                    Err(e)
+                }
+
             }
         }
     }

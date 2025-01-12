@@ -23,7 +23,6 @@ fn shutdown_stream(stream: &TcpStream) {
 
 pub struct ClientDataStream {
     client_stream: TcpStream,
-    from_client: File,
 }
 
 pub struct FillerDataStream {
@@ -34,7 +33,6 @@ impl ClientDataStream {
     fn new(client_stream: TcpStream) -> ClientDataStream {
         Self {
             client_stream,
-            from_client: File::create("target/data-from-client2.bin").unwrap(),
         }
     }
 }
@@ -49,9 +47,6 @@ impl DataStream for ClientDataStream {
         //self.from_client.write_all(&self.temp_buf[.. packet_size])?;
         if let Some(packet_info) = read_packet(dst, &mut self.client_stream)? {
             if packet_info.packet_type == TYPE_DATA {
-                self.from_client
-                    .write_all(&dst[..packet_info.packet_size])
-                    .context("Write log file")?;
                 return Ok(packet_info.packet_size);
             } else if packet_info.packet_type == TYPE_FILLER {
                 bail!("Входящий корректный пакет заполнителя, обработка которого еще не реализована")

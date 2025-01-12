@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
 use easy_error::{Error, ResultExt};
 use splitter::{DataStream, Split};
+use splitter::server_side_vpn_stream::VpnDataStream;
 
 pub fn start_listen(
     client_accept_port: u16,
@@ -63,18 +64,9 @@ fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<P
 
 impl Pair {
     pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> Pair {
-        let timeout = Duration::from_millis(1);
-        client_stream
-            .set_read_timeout(Some(timeout))
-            .expect("Архитектура подразумевает не блокирующий метод чтения");
-        up_stream
-            .set_read_timeout(Some(timeout))
-            .expect("Архитектура подразумевает не блокирующий метод чтения");
         let split = split_server_stream(client_stream);
         Pair {
-            up_stream: Box::new(VpnStream {
-                vpn_stream: up_stream,
-            }),
+            up_stream: Box::new(VpnDataStream::new(up_stream)),
             client_stream: split.data_stream,
             filler_stream: split.filler_stream,
             key: SystemTime::now()
@@ -87,25 +79,4 @@ impl Pair {
     }
 }
 
-struct VpnStream {
-    vpn_stream: TcpStream,
-}
-impl DataStream for VpnStream {
-    fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
-        self.vpn_stream.write_all(buf)
-            .context("Server side vpn_stream write")?;
-        self.vpn_stream.flush()
-            .context("Server side vpn connection read")?;
-        Ok(())
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        let result = self.vpn_stream.read(buf)
-            .context("Server side vpn connection read")?;
-        Ok(result)
-    }
-    fn shutdown(&mut self) {
-        let _ = self.vpn_stream.shutdown(Shutdown::Both);
-    }
-}
 

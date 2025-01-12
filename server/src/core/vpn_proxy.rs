@@ -119,8 +119,6 @@ impl ThreadWorkingSet {
             to_server.write_all(&self.buf[..size])
                 .context("Binary log")?;
             self.pair.up_stream.write_all(&self.buf[..size])?;
-        }else{
-            warn!("READ ZERO")
         }
         //если есть место
         let mut available_space = throttler.get_available_space();

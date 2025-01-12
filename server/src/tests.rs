@@ -60,8 +60,6 @@ mod tests {
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
         start_listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, ct_vpn, cr_stop).unwrap();
-
-
         sleep(Duration::from_millis(500));
 
         //Создаем 2 массива по 1MB заполняем случайными данными
@@ -76,8 +74,6 @@ mod tests {
 
         //в двух разных потоках отправляем данные случайными порциями от 10 до 2000 за раз.
         //и делая при этом паузы от 10 до 73мс
-
-
         let join_handle_client = thread::Builder::new()
             .name("test_client".to_string()).spawn(move || {
             let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
