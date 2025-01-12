@@ -21,7 +21,8 @@ mod tests {
     use crate::packet::{create_packet_header, TYPE_DATA};
     use crate::server_side_split::split_server_stream;
     use crate::tests::test_init::initialize_logger;
-    use std::io::Write;
+    use log::{info};
+    use std::io::{ErrorKind, Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
     use std::thread::sleep;
@@ -100,5 +101,80 @@ mod tests {
         let mut buf = [0; 1000];
         let _ = split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(1u8, buf[900]);
+    }
+
+    /**
+        Проверяем какой код ОШИБКИ возвращает Rust если нет данных
+    */
+    #[test]
+    fn no_data_receive_test() {
+        initialize_logger();
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 51113)).expect("bind to client port");
+
+        let join_handle = thread::spawn(move || {
+            let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 51113)).unwrap();
+            client_stream
+                .set_read_timeout(Some(Duration::from_millis(10)))
+                .expect("Должен быть не блокирующий метод чтения");
+            let mut clone = client_stream.try_clone().unwrap();
+            sleep(Duration::from_millis(500));
+            let mut buf = [0; 10];
+            let _ = clone.write(&mut buf);
+        });
+
+        let mut incoming_stream = client_listener.accept().expect("client connected").0;
+
+        info!("Connected, begin read absent data");
+
+        incoming_stream
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .expect("Должен быть не блокирующий метод чтения");
+
+        info!("Begin read data");
+        let mut buf = [0; 10];
+        let result = incoming_stream.read(&mut buf[..]);
+        //no data considering as error by Rust...
+        let error = result.err().unwrap();
+
+        assert_eq!(true, error.kind() == ErrorKind::WouldBlock);
+        info!("{}", error);
+        sleep(Duration::from_millis(600));
+
+        let size = incoming_stream.read(&mut buf[..]).unwrap();
+        assert_eq!(size, 10);
+        join_handle.join().expect("join");
+    }
+
+    #[test]
+    fn no_data_no_error() {
+        initialize_logger();
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 51114)).expect("bind to client port");
+
+        let join_handle = thread::spawn(move || {
+            let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 51114)).unwrap();
+            client_stream
+                .set_read_timeout(Some(Duration::from_millis(10)))
+                .expect("Должен быть не блокирующий метод чтения");
+            let clone = client_stream.try_clone().unwrap();
+            sleep(Duration::from_secs(2));
+        });
+
+        let incoming_stream = client_listener.accept().expect("client connected").0;
+
+        info!("Connected, begin read absent data");
+        incoming_stream
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .expect("Должен быть не блокирующий метод чтения");
+        let mut split = split_server_stream(incoming_stream);
+
+        info!("Begin read data");
+        let mut buf = [0; 10];
+        //читаем 0 (количество прочитанного), если ничего не прочитали
+        let size = split.data_stream.read(&mut buf[..]).unwrap();
+
+        assert_eq!(size, 0);
+        join_handle.join().expect("join");
     }
 }

@@ -1,9 +1,10 @@
-use log::warn;
-use std::io::{Read, Write};
+use easy_error::{bail, Error, ResultExt};
+use log::{warn};
+use std::io;
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::thread::sleep;
 use std::time::Duration;
-use easy_error::{bail, Error, ResultExt};
 /*
    0x54[1], тип[1], размер[2]
 */
@@ -53,15 +54,16 @@ impl QueuedPacket {
 pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> Result<(), Error> {
     let size = buf.len();
     let mut head_buf = create_packet_header(packet_type, size);
-    stream.write_all(&mut head_buf)
+    stream
+        .write_all(&mut head_buf)
         .context("Write header in write_packet")?;
     let mut offset = 0;
     while offset < size {
-        offset += stream.write(&buf[offset..size])
+        offset += stream
+            .write(&buf[offset..size])
             .context("Write data in write_packet")?;
     }
-    stream.flush()
-        .context("Flush stream in write_packet")
+    stream.flush().context("Flush stream in write_packet")
 }
 
 pub fn read_packet(
@@ -77,7 +79,7 @@ pub fn read_packet(
         let mut loop_counter = 0;
         loop {
             //читаем не больше чем надо
-            offset += stream.read(&mut tmp_buf[offset..packet_size])
+            offset += read(&mut tmp_buf[offset..packet_size], stream)
                 .context("Packet body read")?;
             if offset == packet_size {
                 return Ok(Some(ReadPacketInfo {
@@ -103,8 +105,8 @@ fn read_header(stream: &mut TcpStream) -> Result<Option<Header>, Error> {
     let mut offset: usize = 0;
     let mut loop_counter = 0;
     while offset < HEADER_SIZE {
-        offset += stream.read(&mut header_buf[offset..HEADER_SIZE])
-            .context("Header packet read")?;
+        offset +=
+            read(&mut header_buf[offset..HEADER_SIZE], stream).context("Header packet read")?;
         if offset == 0 {
             //если при первой попытке ничего не удалось прочить - возможно данных просто нет
             return Ok(None);
@@ -117,8 +119,8 @@ fn read_header(stream: &mut TcpStream) -> Result<Option<Header>, Error> {
     if header_buf[0] != FIRST_BYTE {
         bail!("Первый байт должен быть маркером");
     }
-    let packet_size = calculate_packet_size(&header_buf, offset)
-        .context("Packet size calculation")?;
+    let packet_size =
+        calculate_packet_size(&header_buf, offset).context("Packet size calculation")?;
     if packet_size > MAX_PACKET_SIZE {
         bail!("Недопустимый размер пакета")
     }
@@ -148,4 +150,16 @@ pub fn create_packet_header(packet_type: u8, data_len: usize) -> [u8; HEADER_SIZ
     header[2] = (packet_size & 0xFF) as u8;
     header[3] = (packet_size >> 8) as u8;
     header
+}
+
+pub(crate) fn read(buf: &mut [u8], stream: &mut TcpStream) -> Result<usize, io::Error> {
+    match stream.read(buf) {
+        Ok(size) => Ok(size),
+        Err(e) => {
+            if e.kind() == ErrorKind::WouldBlock {
+                return Ok(0);
+            }
+            Err(e)
+        }
+    }
 }
