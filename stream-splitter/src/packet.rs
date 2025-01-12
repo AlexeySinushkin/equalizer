@@ -35,6 +35,7 @@ pub struct ReadPacketInfo {
     В случае если письмо получено не тем получателем
     пересылаем его упакованным в эту структуру
 */
+#[derive(Debug)]
 pub struct QueuedPacket {
     pub buf: Buffer,
     pub len: usize,

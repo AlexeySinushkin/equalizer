@@ -6,6 +6,7 @@ mod tests;
 
 use std::time::Duration;
 use easy_error::Error;
+
 pub const READ_START_AWAIT_TIMEOUT: Duration = Duration::from_millis(5);
 
 pub trait DataStream: Send {
@@ -14,7 +15,3 @@ pub trait DataStream: Send {
     fn shutdown(&mut self);
 }
 
-pub struct Split {
-    pub data_stream: Box<dyn DataStream>,
-    pub filler_stream: Box<dyn DataStream>,
-}

@@ -1,47 +1,59 @@
 use crate::packet::*;
-use crate::{DataStream, Split, READ_START_AWAIT_TIMEOUT};
+use crate::{DataStream, READ_START_AWAIT_TIMEOUT};
 use log::debug;
 use std::net::{Shutdown, TcpStream};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use easy_error::{bail, Error, ResultExt};
+use easy_error::{bail, Error};
+use heapless::spsc::{Consumer, Producer, Queue};
 
-pub fn split_client_stream(client_stream_param: TcpStream) -> Split {
-    client_stream_param
+const N :usize = 2;
+pub struct ClientSideSplit<'a> {
+    pub data_stream: Box<dyn DataStream + 'a>,
+    pub filler_stream: Box<dyn DataStream + 'a>,
+    data_queue: Queue<QueuedPacket, N>,
+    filler_queue: Queue<QueuedPacket, N>
+}
+
+pub fn split_client_stream<'a>(client_stream: TcpStream) -> ClientSideSplit<'a> {
+    client_stream
         .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
         .expect("Архитектура подразумевает не блокирующий метод чтения");
-    let filler_stream = client_stream_param
+    let filler_stream = client_stream
         .try_clone()
         .expect("Failed to clone TcpStream");
     //Если в методе read пришел чужой пакет - перенаправляем его получателю
-    let (ct_data, cr_data) = channel();
-    let (ct_filler, cr_filler) = channel();
-    Split {
-        data_stream: Box::new(ClientDataStream::new(client_stream_param, cr_data, ct_filler)),
+    let mut data_queue: Queue<QueuedPacket, N> = Queue::new();
+    let mut filler_queue: Queue<QueuedPacket, N> = Queue::new();
+
+    let (ct_data, cr_data) = data_queue.split();
+    let (ct_filler, cr_filler) = filler_queue.split();
+    ClientSideSplit {
+        data_stream: Box::new(ClientDataStream::new(client_stream, cr_data, ct_filler)),
         filler_stream: Box::new(FillerDataStream::new(filler_stream, cr_filler, ct_data)),
+        data_queue, filler_queue
     }
 }
 
-pub struct ClientDataStream {
+pub struct ClientDataStream<'a>  {
     client_stream: TcpStream,
     //временный буфер в который получаем и заголовок и тело
     temp_buf: Buffer,
-    cr: Receiver<QueuedPacket>,
-    ct: Sender<QueuedPacket>,
+    cr: Consumer<'a, QueuedPacket, N>,
+    ct: Producer<'a, QueuedPacket, N>,
 }
 
-pub struct FillerDataStream {
+pub struct FillerDataStream<'a>  {
     client_stream: TcpStream,
     temp_buf: Buffer,
-    cr: Receiver<QueuedPacket>,
-    ct: Sender<QueuedPacket>,
+    cr: Consumer<'a, QueuedPacket, N>,
+    ct: Producer<'a, QueuedPacket, N>,
 }
 
-impl ClientDataStream {
+impl<'a> ClientDataStream<'a> {
     fn new(
         client_stream: TcpStream,
-        cr: Receiver<QueuedPacket>,
-        ct: Sender<QueuedPacket>,
-    ) -> ClientDataStream {
+        cr: Consumer<'a, QueuedPacket, N>,
+        ct: Producer<'a, QueuedPacket, N>,
+    ) -> ClientDataStream<'a> {
         Self {
             client_stream,
             temp_buf: [0; BUFFER_SIZE],
@@ -51,13 +63,13 @@ impl ClientDataStream {
     }
 }
 
-impl DataStream for ClientDataStream {
+impl<'a> DataStream for ClientDataStream<'a> {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         write_packet(buf, TYPE_DATA, &mut self.client_stream)
     }
 
     fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
-        if let Ok(packet_body) = self.cr.try_recv() {
+        if let Some(packet_body) = self.cr.dequeue() {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
         }
@@ -72,8 +84,7 @@ impl DataStream for ClientDataStream {
             } else if packet_type == TYPE_FILLER {
                 debug!("Получили пакет заполнителя в методе получения данных");
                 let packet_body = QueuedPacket::copy_from(&self.temp_buf[..packet_size]);
-                self.ct.send(packet_body)
-                    .context("Alive channel")?;
+                self.ct.enqueue(packet_body).expect("enqueue filler packet");
             } else {
                 bail!("Мусор в данных")
             }
@@ -86,12 +97,12 @@ impl DataStream for ClientDataStream {
     }
 }
 
-impl FillerDataStream {
+impl<'a> FillerDataStream<'a> {
     fn new(
         client_stream: TcpStream,
-        cr: Receiver<QueuedPacket>,
-        ct: Sender<QueuedPacket>,
-    ) -> FillerDataStream {
+        cr: Consumer<'a, QueuedPacket, N>,
+        ct: Producer<'a, QueuedPacket, N>,
+    ) -> FillerDataStream<'a> {
         Self {
             client_stream,
             temp_buf: [0; BUFFER_SIZE],
@@ -101,13 +112,13 @@ impl FillerDataStream {
     }
 }
 
-impl DataStream for FillerDataStream {
+impl<'a> DataStream for FillerDataStream<'a> {
     fn write_all(&mut self, _buf: &[u8]) -> Result<(), Error> {
         bail!("Клиент не должен отправлять данных заполнения");
     }
 
     fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
-        if let Ok(packet_body) = self.cr.try_recv() {
+        if let Some(packet_body) = self.cr.dequeue() {
             dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
             return Ok(packet_body.len);
         }
@@ -122,8 +133,7 @@ impl DataStream for FillerDataStream {
             } else if packet_type == TYPE_DATA {
                 debug!("Получили пакет данных в методе получения заполнителя");
                 let packet_body = QueuedPacket::copy_from(&self.temp_buf[..packet_size]);
-                self.ct.send(packet_body)
-                    .context("Alive channel")?;
+                self.ct.enqueue(packet_body).expect("enqueue data packet");
             } else {
                 bail!( "Мусор в данных")
             }

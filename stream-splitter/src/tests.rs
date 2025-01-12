@@ -158,7 +158,7 @@ mod tests {
             client_stream
                 .set_read_timeout(Some(Duration::from_millis(10)))
                 .expect("Должен быть не блокирующий метод чтения");
-            let clone = client_stream.try_clone().unwrap();
+            let _clone = client_stream.try_clone().unwrap();
             sleep(Duration::from_secs(2));
         });
 
