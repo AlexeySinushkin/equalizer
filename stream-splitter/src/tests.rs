@@ -136,7 +136,7 @@ mod tests {
         let result = incoming_stream.read(&mut buf[..]);
         //no data considering as error by Rust...
         let error = result.err().unwrap();
-
+        //https://users.rust-lang.org/t/best-practices-for-handling-io-errors-in-libraries/115945/5
         assert_eq!(true, error.kind() == ErrorKind::WouldBlock);
         info!("{}", error);
         sleep(Duration::from_millis(600));

@@ -1,6 +1,7 @@
 pub mod client_side_split;
 mod packet;
 pub mod server_side_split;
+pub mod server_side_vpn_stream;
 mod tests;
 
 use easy_error::Error;

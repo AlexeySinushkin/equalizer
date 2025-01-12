@@ -57,12 +57,8 @@ pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> Resu
     stream
         .write_all(&mut head_buf)
         .context("Write header in write_packet")?;
-    let mut offset = 0;
-    while offset < size {
-        offset += stream
-            .write(&buf[offset..size])
-            .context("Write data in write_packet")?;
-    }
+    write(buf, stream)
+        .context("Write data in write_packet")?;
     stream.flush().context("Flush stream in write_packet")
 }
 
@@ -156,10 +152,21 @@ pub(crate) fn read(buf: &mut [u8], stream: &mut TcpStream) -> Result<usize, io::
     match stream.read(buf) {
         Ok(size) => Ok(size),
         Err(e) => {
-            if e.kind() == ErrorKind::WouldBlock {
-                return Ok(0);
+            match e.kind() {
+                ErrorKind::NotFound => Ok(0),
+                ErrorKind::TimedOut => Ok(0),
+                _ => Err(e)
             }
-            Err(e)
         }
     }
+}
+
+pub(crate) fn write(buf: &[u8], stream: &mut TcpStream) -> Result<usize, io::Error> {
+    let size = buf.len();
+    let mut offset = 0;
+    while offset < size {
+        offset += stream
+            .write(&buf[offset..size])?;
+    }
+    Ok(size)
 }
