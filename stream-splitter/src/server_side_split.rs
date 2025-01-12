@@ -1,11 +1,14 @@
 use crate::packet::*;
-use crate::{DataStream, Split};
+use crate::{DataStream, Split, READ_START_AWAIT_TIMEOUT};
 use std::fs::File;
 use std::io::{ Write};
 use std::net::{Shutdown, TcpStream};
 use easy_error::{bail, Error, ResultExt};
 
 pub fn split_server_stream(client_stream: TcpStream) -> Split {
+    client_stream
+        .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
+        .expect("Архитектура подразумевает не блокирующий метод чтения");
     let filler_stream = client_stream
         .try_clone()
         .expect("Failed to clone TcpStream");

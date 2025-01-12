@@ -27,6 +27,7 @@ mod tests {
     use std::thread;
     use std::thread::sleep;
     use std::time::Duration;
+    use crate::READ_START_AWAIT_TIMEOUT;
 
     /**
     Сервер после подключения к нему шлет
@@ -115,7 +116,7 @@ mod tests {
         let join_handle = thread::spawn(move || {
             let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 51113)).unwrap();
             client_stream
-                .set_read_timeout(Some(Duration::from_millis(10)))
+                .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
                 .expect("Должен быть не блокирующий метод чтения");
             let mut clone = client_stream.try_clone().unwrap();
             sleep(Duration::from_millis(500));
@@ -137,7 +138,7 @@ mod tests {
         //no data considering as error by Rust...
         let error = result.err().unwrap();
         //https://users.rust-lang.org/t/best-practices-for-handling-io-errors-in-libraries/115945/5
-        assert_eq!(true, error.kind() == ErrorKind::WouldBlock);
+        assert_eq!(true, error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut);
         info!("{}", error);
         sleep(Duration::from_millis(600));
 

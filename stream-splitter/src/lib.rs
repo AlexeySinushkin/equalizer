@@ -4,7 +4,9 @@ pub mod server_side_split;
 pub mod server_side_vpn_stream;
 mod tests;
 
+use std::time::Duration;
 use easy_error::Error;
+pub const READ_START_AWAIT_TIMEOUT: Duration = Duration::from_millis(5);
 
 pub trait DataStream: Send {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error>;

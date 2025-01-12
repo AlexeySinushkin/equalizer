@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use easy_error::{Error, ResultExt};
-use crate::{packet, DataStream};
+use crate::{packet, DataStream, READ_START_AWAIT_TIMEOUT};
 
 pub struct VpnDataStream {
     vpn_data_stream: TcpStream,
@@ -9,6 +9,9 @@ pub struct VpnDataStream {
 
 impl VpnDataStream {
     pub fn new(vpn_data_stream: TcpStream) -> VpnDataStream {
+        vpn_data_stream
+            .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
+            .expect("Архитектура подразумевает не блокирующий метод чтения");
         Self {
             vpn_data_stream,
         }
