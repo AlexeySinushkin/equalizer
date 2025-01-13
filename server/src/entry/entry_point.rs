@@ -8,7 +8,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
 use easy_error::{Error, ResultExt};
-use splitter::{DataStream, Split};
+use splitter::{DataStream};
 use splitter::server_side_vpn_stream::VpnDataStream;
 
 pub fn start_listen(

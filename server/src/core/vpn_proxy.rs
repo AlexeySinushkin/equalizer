@@ -4,7 +4,7 @@ use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::INITIAL_SPEED;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
 use std::fs::File;
 use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
@@ -115,7 +115,7 @@ impl ThreadWorkingSet {
         let size= self.pair.client_stream.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
-            trace!("->> {}", size);
+            //trace!("->> {}", size);
             self.pair.up_stream.write_all(&self.buf[..size])?;
             to_server.write_all(&self.buf[..size])
                 .context("Binary log")?;
@@ -140,10 +140,10 @@ impl ThreadWorkingSet {
         } else {
             sleep(BURNOUT_DELAY);
         }
-        if let Some(collected_info) = filler.clean_almost_full() {
+        /*if let Some(collected_info) = filler.clean_almost_full() {
             self.ct_state.send(ProxyState::Info(collected_info))
                 .context("Send hot statistic info")?;
-        }
+        }*/
         if let Ok(command) = self.cr_command.try_recv() {
             match command {
                 RuntimeCommand::SetSpeed(speed) => {

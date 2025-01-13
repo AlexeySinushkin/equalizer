@@ -5,12 +5,13 @@ use crate::{READ_START_AWAIT_TIMEOUT};
 use log::debug;
 use std::net::{Shutdown, TcpStream};
 use std::rc::Rc;
-use easy_error::{bail, Error};
+use easy_error::{bail, ensure, Error};
 
 
-pub struct ClientSideSplit {
-    pub data_stream: Rc<dyn DataStreamVpn>,
-    pub filler_stream: Rc<dyn DataStreamFiller>,
+pub struct ClientSideSplit<'a> {
+    pub data_stream: Rc<dyn DataStreamVpn + 'a>,
+    pub filler_stream: Rc<dyn DataStreamFiller + 'a>,
+    stream: TcpStream
 }
 
 pub trait DataStreamVpn {
@@ -25,15 +26,20 @@ pub trait DataStreamFiller {
 }
 
 
-pub fn split_client_stream(client_stream: TcpStream) -> ClientSideSplit {
+pub fn split_client_stream<'a>(client_stream: TcpStream) -> ClientSideSplit<'a> {
     client_stream
         .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
         .expect("Архитектура подразумевает не блокирующий метод чтения");
-    let ds = Rc::new(CommonDataStream::new(client_stream));
+    let ds = Rc::new(CommonDataStream::new(client_stream.try_clone().unwrap()));
     ClientSideSplit {
         data_stream: ds.clone(),
         filler_stream: ds,
+        stream: client_stream
     }
+}
+
+pub fn squash<'a>(split: ClientSideSplit) -> TcpStream {
+    split.stream
 }
 
 struct CommonDataStream  {
@@ -67,11 +73,13 @@ impl CommonDataStream {
         //Если в методе read пришел чужой пакет - перенаправляем его получателю
         if target_type == TYPE_DATA && !self.data_pending_queue.borrow().is_empty() {
             if let Some(packet_body) = self.data_pending_queue.borrow_mut().pop_front() {
+                ensure!(dst.len()>=packet_body.len, "Ожидается что хватит места на пакет. {} < {}", dst.len(), packet_body.len);
                 dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
                 return Ok(packet_body.len);
             }
         } else if target_type == TYPE_FILLER && !self.filler_pending_queue.borrow().is_empty() {
             if let Some(packet_body) = self.filler_pending_queue.borrow_mut().pop_front() {
+                ensure!(dst.len()>=packet_body.len, "Ожидается что хватит места на пакет. {} < {}", dst.len(), packet_body.len);
                 dst[..packet_body.len].copy_from_slice(&packet_body.buf[..packet_body.len]);
                 return Ok(packet_body.len);
             }

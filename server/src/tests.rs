@@ -30,6 +30,7 @@ mod tests {
     use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::rc::Rc;
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
     use std::thread::{sleep, JoinHandle};
@@ -38,7 +39,7 @@ mod tests {
     use rand::Rng;
     use rand::rngs::ThreadRng;
     use serial_test::serial;
-    use splitter::client_side_split::split_client_stream;
+    use splitter::client_side_split::{split_client_stream, squash, ClientSideSplit, DataStreamFiller, DataStreamVpn};
     use splitter::DataStream;
     use splitter::server_side_vpn_stream::VpnDataStream;
     use crate::orchestrator::Orchestrator;
@@ -56,9 +57,9 @@ mod tests {
         //mock впн сервера
         vpn_stream: Box<dyn DataStream>,
         //мок клиента
-        client_data_stream: Box<dyn DataStream>,
+        client_data_stream: Rc<dyn DataStreamVpn>,
         //мок филлера (клиента)
-        client_filler_stream: Box<dyn DataStream>,
+        client_filler_stream: Rc<dyn DataStreamFiller>,
         orchestrator: Orchestrator,
         join_handle: (Sender<bool>, JoinHandle<()>)
     }
@@ -123,40 +124,40 @@ mod tests {
         let join_handle_client = thread::Builder::new()
             .name("test_client".to_string()).spawn(move || {
             let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            client_side_write_and_read(client_proxy_stream, &client_to_proxy, &mut proxy_to_vpn,  "client");
-            return proxy_to_vpn;
+            let stream = client_side_write_and_read(client_proxy_stream, &client_to_proxy, &mut proxy_to_vpn,  "client");
+            return (proxy_to_vpn, stream);
         }).unwrap();
 
         let join_handle_server = thread::Builder::new()
             .name("test_vpn".to_string()).spawn(move || {
             let mut proxy_to_client: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            server_side_write_and_read(proxy_vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
-            return proxy_to_client;
+            let stream = server_side_write_and_read(proxy_vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
+            return (proxy_to_client, stream);
         }).unwrap();
 
         let proxy_to_vpn = join_handle_client.join().unwrap();
         let proxy_to_client = join_handle_server.join().unwrap();
 
-        let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_client);
-        let compare_result2 = compare("vpn->client", &proxy_to_vpn, &vpn_to_proxy);
+        let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_client.0);
+        let compare_result2 = compare("vpn->client", &proxy_to_vpn.0, &vpn_to_proxy);
 
         for i in 0..10 {
-            info!("{:#02x} {:#02x} {:#02x} {:#02x}", client_to_proxy[i], proxy_to_client[i],
-                proxy_to_vpn[i], vpn_to_proxy[i])
+            info!("{:#02x} {:#02x} {:#02x} {:#02x}", client_to_proxy[i], proxy_to_client.0[i],
+                proxy_to_vpn.0[i], vpn_to_proxy[i])
         }
         ct_stop.send(true).unwrap();
         assert!(compare_result1);
         assert!(compare_result2);
     }
 
-    fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str){
+    fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
         let mut out_file = File::create("target/client-out.bin").unwrap();
         let mut in_file = File::create("target/client-in.bin").unwrap();
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
         let mut split= split_client_stream(stream);
-        let mut stream = split.data_stream;
-        let mut filler = split.filler_stream;
+        let mut stream = split.data_stream.clone();
+        let mut filler = split.filler_stream.clone();
         let mut rng = rand::thread_rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
@@ -180,29 +181,30 @@ mod tests {
                 write_left_size -= to_send_size;
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
                 iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                //trace!("{:?} Собираемся читать", name);
+                trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
                     let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
-                    //trace!("{:?} Прочитали {:?} ", name, read);
+                    trace!("{:?} Прочитали {:?} ", name, read);
                     if read==0 {
                         sleep(Duration::from_millis(100));
                     }
                     read_size += read;
                 } else {
-                    //info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
+                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }
         trace!("Поток завершён {:?}", thread::current().name());
+        squash(split)
     }
 
-    fn server_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str){
+    fn server_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream{
         let mut out_file = File::create("target/server-out.bin").unwrap();
         let mut in_file = File::create("target/server-in.bin").unwrap();
 
@@ -220,33 +222,34 @@ mod tests {
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                //trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
+                trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
                 out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
                 iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                //trace!("{:?} Собираемся читать", name);
+                trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
                     let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
-                    //trace!("{:?} Прочитали {:?} ", name, read);
+                    trace!("{:?} Прочитали {:?} ", name, read);
                     if read==0 {
                         sleep(Duration::from_millis(100));
                     }
                     read_size += read;
                 } else {
-                    //info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
+                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }
-        trace!("Поток завершён {:?}", thread::current().name());
+        info!("Поток сервера завершён {:?}", thread::current().name());
+        stream
     }
 
     fn compare(pair: &str, left: &[u8], right: &[u8]) -> bool {
