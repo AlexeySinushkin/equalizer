@@ -60,7 +60,7 @@ mod tests {
         thread::sleep(std::time::Duration::from_millis(100));
 
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 11111)).unwrap();
-        let mut split = split_client_stream(client_stream);
+        let split = split_client_stream(client_stream);
         let mut buf = [0; 5];
         split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(b"11111", &buf[..5]);
@@ -74,6 +74,47 @@ mod tests {
         assert_eq!(b"33333", &buf[..5]);
         split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(b"44444", &buf[..5]);
+    }
+
+    #[test]
+    fn internal_queue_test() {
+        initialize_logger();
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 11110)).expect("bind to client port");
+
+        thread::spawn(move || {
+            let stream = client_listener.accept().expect("client connected");
+            let mut split = split_server_stream(stream.0);
+            split.filler_stream.write_all(b"11111").expect("write data"); //0x49
+            split
+                .filler_stream
+                .write_all(b"22222")
+                .expect("write filler"); //0x50
+            split
+                .filler_stream
+                .write_all(b"33333")
+                .expect("write filler"); //0x51
+            split.data_stream.write_all(b"44444").expect("write data"); //0x52
+        });
+        sleep(Duration::from_millis(100));
+
+        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 11110)).unwrap();
+        let split = split_client_stream(client_stream);
+        let mut buf = [0; 5];
+        sleep(Duration::from_millis(500));
+
+        split.data_stream.read(&mut buf).expect("read 11111");
+        split.data_stream.read(&mut buf).expect("read 22222");
+        split.data_stream.read(&mut buf).expect("read 33333");
+        split.data_stream.read(&mut buf).expect("read 44444");
+        assert_eq!(b"44444", &buf[..5]);
+
+        split.filler_stream.read(&mut buf).expect("read data");
+        assert_eq!(b"11111", &buf[..5]);
+        split.filler_stream.read(&mut buf).expect("read filler");
+        assert_eq!(b"22222", &buf[..5]);
+        split.filler_stream.read(&mut buf).expect("read filler");
+        assert_eq!(b"33333", &buf[..5]);
     }
 
     #[test]
@@ -98,7 +139,7 @@ mod tests {
         sleep(Duration::from_millis(100));
 
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 11112)).unwrap();
-        let mut split = split_client_stream(client_stream);
+        let split = split_client_stream(client_stream);
         let mut buf = [0; 1000];
         let _ = split.data_stream.read(&mut buf).expect("read data");
         assert_eq!(1u8, buf[900]);
