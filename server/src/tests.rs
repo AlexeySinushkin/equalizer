@@ -27,10 +27,12 @@ pub mod test_init {
 
 #[cfg(test)]
 mod tests {
+    use std::env::var;
     use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
     use std::rc::Rc;
+    use std::sync::mpsc;
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
     use std::thread::{sleep, JoinHandle};
@@ -297,9 +299,9 @@ mod tests {
         initialize_logger();
         info!("FILLER_ATTACH_AND_FILL");
         const BUF_SIZE: usize = 1_000_020;
-        const PACKETS_COUNT : usize = 50;
-        const MS_COUNT : usize = 500;
-        const ONE_PACKET_SIZE : usize = INITIAL_SPEED*MS_COUNT/PACKETS_COUNT;
+        const PACKETS_COUNT: usize = 50;
+        const MS_COUNT: usize = 500;
+        const ONE_PACKET_SIZE: usize = INITIAL_SPEED * MS_COUNT / PACKETS_COUNT;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
@@ -313,25 +315,27 @@ mod tests {
         vpn_stream.write_all(&mut buf[..10]).unwrap();
 
         sleep(Duration::from_millis(5));
-        if let Ok(vpn_read) = client_data_stream.read(&mut buf){
+        if let Ok(vpn_read) = client_data_stream.read(&mut buf) {
             info!("Полученных полезных байт должно быть 10 => {}", vpn_read);
         }
         orchestrator.invoke();
-
+        let (tx, rx) = mpsc::channel();
         //отправляем пол секунды объем данных который должен уйти за пол секунды
         //ждем 100мс - ничего не отправляем
         //отправляем пол секунды объем данных который должен уйти за пол секунды
         let join_handle_2 = thread::spawn(move || {
             let value_data: [u8; ONE_PACKET_SIZE] = [0; ONE_PACKET_SIZE];
+            let half_secs = Duration::from_millis((MS_COUNT) as u64);
+            tx.send(true).unwrap();
+            trace!("---------Начали отправку");
             let start = Instant::now();
 
-            let half_secs = Duration::from_millis((MS_COUNT) as u64);
             for _i in 0..PACKETS_COUNT {
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
 
             info!("AWAITING HALF SECOND");
-            while start.elapsed()<=half_secs {
+            while start.elapsed() <= half_secs {
                 sleep(Duration::from_millis(1))
             }
             info!("FILLER SHOULD START NOW");
@@ -345,19 +349,24 @@ mod tests {
 
 
         let receive_time = Duration::from_millis(1150);
+        rx.recv().unwrap();
+        trace!("---------Начали получение");
         let start = Instant::now();
-        trace!("Начали ожидание");
         let mut data_offset = 0;
         let mut filler_offset = 0;
         while data_offset < BUF_SIZE {
-            data_offset += client_data_stream.read(&mut buf[data_offset..]).unwrap();
-            filler_offset += client_filler_stream.read(&mut buf[filler_offset..]).unwrap();
-
-            if start.elapsed()>receive_time {
+            let data_read = client_data_stream.read(&mut buf[..]).unwrap();
+            let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
+            data_offset += data_read;
+            filler_offset += filler_read;
+            if start.elapsed() > receive_time {
                 break;
             }
             orchestrator.invoke();
             trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
+            if data_read == 0 {
+                sleep(Duration::from_millis(200));
+            }
         }
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         let mut vpn_stream = join_handle_2.join().unwrap();
