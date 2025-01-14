@@ -298,10 +298,11 @@ mod tests {
     fn filler_attach_and_fill() {
         initialize_logger();
         info!("FILLER_ATTACH_AND_FILL");
-        const BUF_SIZE: usize = 1_000_020;
+        const BUF_SIZE: usize = 12_000;
         const PACKETS_COUNT: usize = 50;
         const MS_COUNT: usize = 500;
         const ONE_PACKET_SIZE: usize = INITIAL_SPEED * MS_COUNT / PACKETS_COUNT;
+        //размер пакета примерно 10_000
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
@@ -312,8 +313,6 @@ mod tests {
             join_handle
         } = create_test_streams(1, None);
 
-        vpn_stream.write_all(&mut buf[..10]).unwrap();
-
         sleep(Duration::from_millis(5));
         if let Ok(vpn_read) = client_data_stream.read(&mut buf) {
             info!("Полученных полезных байт должно быть 10 => {}", vpn_read);
@@ -323,7 +322,8 @@ mod tests {
         //отправляем пол секунды объем данных который должен уйти за пол секунды
         //ждем 100мс - ничего не отправляем
         //отправляем пол секунды объем данных который должен уйти за пол секунды
-        let join_handle_2 = thread::spawn(move || {
+        let join_handle_2 = thread::Builder::new()
+            .name("send".to_string()).spawn(move || {
             let value_data: [u8; ONE_PACKET_SIZE] = [0; ONE_PACKET_SIZE];
             let half_secs = Duration::from_millis((MS_COUNT) as u64);
             tx.send(true).unwrap();
@@ -345,7 +345,7 @@ mod tests {
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
             return vpn_stream;
-        });
+        }).unwrap();
 
 
         let receive_time = Duration::from_millis(1150);
@@ -363,9 +363,9 @@ mod tests {
                 break;
             }
             orchestrator.invoke();
-            trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
-            if data_read == 0 {
-                sleep(Duration::from_millis(200));
+
+            if data_read > 0 {
+                trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
         }
         info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);

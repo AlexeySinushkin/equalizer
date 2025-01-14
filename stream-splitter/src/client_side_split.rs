@@ -96,7 +96,7 @@ impl CommonDataStream {
                 dst[..packet_size].copy_from_slice(&temp_buf[..packet_size]);
                 return Ok(packet_info.packet_size);
             } else if packet_type == redirect_type {
-                debug!("Получили пакет заполнителя в методе получения данных");
+                debug!("Получили чужеродный");
                 let packet_body = QueuedPacket::copy_from(&temp_buf[..packet_size]);
                 if redirect_type==TYPE_FILLER {
                     self.filler_pending_queue.borrow_mut().push_back(packet_body);
