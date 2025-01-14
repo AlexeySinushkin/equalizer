@@ -168,14 +168,17 @@ mod tests {
         let mut filler_buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
-            let _ = filler.read(&mut filler_buf);
+            let filler_size = filler.read(&mut filler_buf).unwrap();
+            if filler_size > 0 {
+                error!("filler packet appear {filler_size}");
+            }
             //отправляем в поток данные из out_buf
             if write_left_size > 0 {
                 let mut to_send_size: usize = get_amount_to_send_size(&mut rng) as usize;
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
+                //trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
                 out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
@@ -183,22 +186,21 @@ mod tests {
                 write_left_size -= to_send_size;
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
                 iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                trace!("{:?} Собираемся читать", name);
+                //trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
                     let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
-                    trace!("{:?} Прочитали {:?} ", name, read);
+                    //trace!("{:?} Прочитали {:?} ", name, read);
                     if read==0 {
-                        sleep(Duration::from_millis(100));
+                        sleep(Duration::from_millis(50));
+                        info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size);
                     }
                     read_size += read;
-                } else {
-                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }
@@ -224,29 +226,28 @@ mod tests {
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
+                //trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
                 out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
                 iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
-                trace!("{:?} Собираемся читать", name);
+                //trace!("{:?} Собираемся читать", name);
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
                     let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
-                    trace!("{:?} Прочитали {:?} ", name, read);
+                    //trace!("{:?} Прочитали {:?} ", name, read);
                     if read==0 {
-                        sleep(Duration::from_millis(100));
+                        sleep(Duration::from_millis(50));
+                        info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                     }
                     read_size += read;
-                } else {
-                    info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size)
                 }
             }
         }

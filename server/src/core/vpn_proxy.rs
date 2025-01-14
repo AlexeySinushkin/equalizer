@@ -86,10 +86,9 @@ impl ThreadWorkingSet {
                 let mut filler = Filler::new(INITIAL_SPEED);
                 let mut throttler = ThrottlerAnalyzer::new(INITIAL_SPEED);
                 instance.ct_state.send(ProxyState::SetupComplete).unwrap();
-                let mut to_server = File::create("target/proxy-to-server.bin").unwrap();
                 info!("Client thread started");
                 loop {
-                    match instance.main_loop(&mut filler, &mut throttler, &mut to_server) {
+                    match instance.main_loop(&mut filler, &mut throttler) {
                         Err(e) => {
                             error!("{}", e);
                             let _ = instance.ct_state.send(ProxyState::Broken);
@@ -109,7 +108,6 @@ impl ThreadWorkingSet {
         &mut self,
         filler: &mut Filler,
         throttler: &mut ThrottlerAnalyzer,
-        to_server: &mut File,
     ) -> Result<(), Error> {
         //GET запрос на чтение нового видоса
         let size= self.pair.client_stream.read(&mut self.buf[..])?;
@@ -117,8 +115,6 @@ impl ThreadWorkingSet {
             //перенаправляем его VPN серверу
             //trace!("->> {}", size);
             self.pair.up_stream.write_all(&self.buf[..size])?;
-            to_server.write_all(&self.buf[..size])
-                .context("Binary log")?;
         }
         //если есть место
         let mut available_space = throttler.get_available_space();
@@ -136,6 +132,8 @@ impl ThreadWorkingSet {
                 //trace!("=>> filler {}", packet.size);
                 self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
                 filler.filler_was_sent(packet.size);
+            } else {
+                sleep(BURNOUT_DELAY);
             }
         } else {
             sleep(BURNOUT_DELAY);
