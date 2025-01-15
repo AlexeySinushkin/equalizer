@@ -349,27 +349,28 @@ mod tests {
         }).unwrap();
 
 
-        let receive_time = Duration::from_millis(1150);
+        let receive_time = Duration::from_millis(1070);
         rx.recv().unwrap();
         trace!("---------Начали получение");
         let start = Instant::now();
         let mut data_offset = 0;
         let mut filler_offset = 0;
-        while data_offset < BUF_SIZE {
+        loop {
             let data_read = client_data_stream.read(&mut buf[..]).unwrap();
             let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
             data_offset += data_read;
             filler_offset += filler_read;
             if start.elapsed() > receive_time {
+                info!("Прошло {}. Окончили ожидание.", start.elapsed().as_millis());
                 break;
             }
             orchestrator.invoke();
 
-            if data_read > 0 {
+            if data_read > 0 || filler_read > 0 {
                 trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
         }
-        info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
+        info!("Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         let mut vpn_stream = join_handle_2.join().unwrap();
         vpn_stream.write_all(&mut buf[..1]);
         assert!(data_offset >= 1_000_000);

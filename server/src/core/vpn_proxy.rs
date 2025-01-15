@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::core::filler::Filler;
 use crate::core::throttler::ThrottlerAnalyzer;
 use crate::objects::Pair;
@@ -10,8 +11,8 @@ use std::io::Write;
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
-use std::time::Duration;
-use easy_error::{Error, ResultExt};
+use std::time::{Duration, Instant};
+use easy_error::{bail, Error, ResultExt};
 
 const A_FEW_SPACE: usize = 100;
 const BURNOUT_DELAY: Duration = Duration::from_micros(500);
@@ -59,15 +60,17 @@ impl VpnProxy {
         let (ct_command, cr_command) = channel();
         let (ct_state, cr_state) = channel();
         let key = pair.key.clone();
+
         let thread_working_set = ThreadWorkingSet {
             key: key.clone(),
             cr_command,
-            ct_state,
+            ct_state: ct_state.clone(),
             pair,
             buf: [0; ONE_PACKET_MAX_SIZE],
         };
 
         ThreadWorkingSet::thread_start(thread_working_set);
+
 
         Self {
             ct_command,
@@ -138,10 +141,14 @@ impl ThreadWorkingSet {
         } else {
             sleep(BURNOUT_DELAY);
         }
-        /*if let Some(collected_info) = filler.clean_almost_full() {
+        if let Some(collected_info) = filler.clean_almost_full() {
+            let start = Instant::now();
             self.ct_state.send(ProxyState::Info(collected_info))
                 .context("Send hot statistic info")?;
-        }*/
+            if start.elapsed() > Duration::from_millis(3){
+                bail!("Долгая отправка данных по статистике");
+            }
+        }
         if let Ok(command) = self.cr_command.try_recv() {
             match command {
                 RuntimeCommand::SetSpeed(speed) => {
@@ -151,5 +158,38 @@ impl ThreadWorkingSet {
             }
         }
         Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+    use std::thread;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use log::info;
+    use crate::tests::test_init::initialize_logger;
+
+    #[test]
+    fn mpsc_test() {
+        initialize_logger();
+        let (tx, rx) = mpsc::channel();
+        let join  = thread::spawn(move || {
+            tx.send(1).unwrap();
+            tx.send(2).unwrap();
+            tx.send(3).unwrap();
+            tx.send(4).unwrap();
+            info!("send done");
+            sleep(Duration::from_millis(300))
+        });
+        sleep(Duration::from_millis(100));
+        assert_eq!(1, rx.recv().unwrap());
+        info!("received 1");
+        assert_eq!(2, rx.recv().unwrap());
+        info!("received 2");
+        assert_eq!(3, rx.recv().unwrap());
+        info!("received 3");
+        assert_eq!(4, rx.recv().unwrap());
+        info!("received 4");
+        join.join().unwrap();
     }
 }
