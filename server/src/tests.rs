@@ -349,18 +349,19 @@ mod tests {
         }).unwrap();
 
 
-        let receive_time = Duration::from_millis(1150);
+        let receive_time = Duration::from_millis(1070);
         rx.recv().unwrap();
         trace!("---------Начали получение");
         let start = Instant::now();
         let mut data_offset = 0;
         let mut filler_offset = 0;
-        while data_offset < BUF_SIZE {
+        loop {
             let data_read = client_data_stream.read(&mut buf[..]).unwrap();
             let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
             data_offset += data_read;
             filler_offset += filler_read;
             if start.elapsed() > receive_time {
+                info!("Прошло {}. Окончили ожидание.", start.elapsed().as_millis());
                 break;
             }
             orchestrator.invoke();
@@ -369,7 +370,7 @@ mod tests {
                 trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
         }
-        info!("Окончили ожидание. Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
+        info!("Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         let mut vpn_stream = join_handle_2.join().unwrap();
         vpn_stream.write_all(&mut buf[..1]);
         assert!(data_offset >= 1_000_000);
@@ -381,7 +382,7 @@ mod tests {
 
     /*
     Проверяем что сервер в целом не падает, если отключился какой-то клиент
-
+    */
     #[test]
     #[serial]
     fn server_stable_test() {
@@ -392,43 +393,46 @@ mod tests {
 
         let TestStreams {
             mut vpn_stream,
-            mut client_stream,
-            mut client_filler_stream,
+            mut client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(2, None);
 
-        client_stream.write(&buf[..10]).unwrap();
-        vpn_stream.write(&buf[..10]).unwrap();
+        client_data_stream.write_all(&buf[..10]).unwrap();
+        vpn_stream.write_all(&buf[..10]).unwrap();
 
         sleep(Duration::from_millis(10));
         //закрываем чтение
-        client_stream.shutdown();
+        client_data_stream.shutdown();
         //пытаемся отправить в через прокси данные в закрытый канал
-        for _i in 0..100{
+        for i in 0..100 {
             //получаем состояние Broken
             orchestrator.invoke();
             sleep(Duration::from_millis(10));
-            let _ = vpn_stream.write(&buf[..10]);
-            let _ = vpn_stream.flush();
-            let _ = client_filler_stream.read(&mut buf);
+            let send_result = vpn_stream.write_all(&buf[..10]);
+            if send_result.is_err() {
+                info!("broken after {}", i);
+                break;
+            }
         }
         //проверяем что клиентов больше нет, а мы все еще не упали
         assert_eq!(0, orchestrator.get_pairs_count());
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
+        //TODO: дописать повторное подключение
     }
-*/
+
     /*
     Проверка, что статистика доходит до мейна
-
+    */
     #[test]
     #[serial]
     fn stat_goes_to_main() {
         let TestStreams {
             mut vpn_stream,
-            mut client_stream,
-            mut client_filler_stream,
+            mut client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
@@ -438,9 +442,9 @@ mod tests {
         loop {
             orchestrator.invoke();
             sleep(Duration::from_millis(100));
-            let _ = client_stream.write(&buf).unwrap();
-            let _ = vpn_stream.write(&buf).unwrap();
-            let _ = client_stream.read(&mut buf);
+            let _ = client_data_stream.write_all(&buf).unwrap();
+            let _ = vpn_stream.write_all(&buf).unwrap();
+            let _ = client_data_stream.read(&mut buf);
             let _ = vpn_stream.read(&mut buf);
             let _ = client_filler_stream.read(&mut buf);
 
@@ -453,6 +457,6 @@ mod tests {
         }
         join_handle.1.join().unwrap();
     }
-*/
+
 
 }
