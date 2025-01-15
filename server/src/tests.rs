@@ -394,7 +394,7 @@ mod tests {
         let TestStreams {
             mut vpn_stream,
             mut client_data_stream,
-            mut client_filler_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(2, None);
@@ -412,7 +412,7 @@ mod tests {
             sleep(Duration::from_millis(10));
             let send_result = vpn_stream.write_all(&buf[..10]);
             if send_result.is_err() {
-                info!("broke after {}", i);
+                info!("broken after {}", i);
                 break;
             }
         }
@@ -425,14 +425,14 @@ mod tests {
 
     /*
     Проверка, что статистика доходит до мейна
-
+    */
     #[test]
     #[serial]
     fn stat_goes_to_main() {
         let TestStreams {
             mut vpn_stream,
-            mut client_stream,
-            mut client_filler_stream,
+            mut client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
@@ -442,9 +442,9 @@ mod tests {
         loop {
             orchestrator.invoke();
             sleep(Duration::from_millis(100));
-            let _ = client_stream.write(&buf).unwrap();
-            let _ = vpn_stream.write(&buf).unwrap();
-            let _ = client_stream.read(&mut buf);
+            let _ = client_data_stream.write_all(&buf).unwrap();
+            let _ = vpn_stream.write_all(&buf).unwrap();
+            let _ = client_data_stream.read(&mut buf);
             let _ = vpn_stream.read(&mut buf);
             let _ = client_filler_stream.read(&mut buf);
 
