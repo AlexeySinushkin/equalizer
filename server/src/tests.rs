@@ -365,7 +365,7 @@ mod tests {
             }
             orchestrator.invoke();
 
-            if data_read > 0 {
+            if data_read > 0 || filler_read > 0 {
                 trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
         }
