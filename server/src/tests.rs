@@ -382,7 +382,7 @@ mod tests {
 
     /*
     Проверяем что сервер в целом не падает, если отключился какой-то клиент
-
+    */
     #[test]
     #[serial]
     fn server_stable_test() {
@@ -393,33 +393,36 @@ mod tests {
 
         let TestStreams {
             mut vpn_stream,
-            mut client_stream,
+            mut client_data_stream,
             mut client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(2, None);
 
-        client_stream.write(&buf[..10]).unwrap();
-        vpn_stream.write(&buf[..10]).unwrap();
+        client_data_stream.write_all(&buf[..10]).unwrap();
+        vpn_stream.write_all(&buf[..10]).unwrap();
 
         sleep(Duration::from_millis(10));
         //закрываем чтение
-        client_stream.shutdown();
+        client_data_stream.shutdown();
         //пытаемся отправить в через прокси данные в закрытый канал
-        for _i in 0..100{
+        for i in 0..100 {
             //получаем состояние Broken
             orchestrator.invoke();
             sleep(Duration::from_millis(10));
-            let _ = vpn_stream.write(&buf[..10]);
-            let _ = vpn_stream.flush();
-            let _ = client_filler_stream.read(&mut buf);
+            let send_result = vpn_stream.write_all(&buf[..10]);
+            if send_result.is_err() {
+                info!("broke after {}", i);
+                break;
+            }
         }
         //проверяем что клиентов больше нет, а мы все еще не упали
         assert_eq!(0, orchestrator.get_pairs_count());
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
+        //TODO: дописать повторное подключение
     }
-*/
+
     /*
     Проверка, что статистика доходит до мейна
 
@@ -454,6 +457,6 @@ mod tests {
         }
         join_handle.1.join().unwrap();
     }
-*/
+
 
 }
