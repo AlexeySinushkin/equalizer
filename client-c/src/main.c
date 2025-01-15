@@ -10,27 +10,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
+#include "packet.h"
 
 typedef u_int8_t u8;
 
-const int HEADER_SIZE = 4;
-const int MAX_PACKET_SIZE = 10 * 1024;
-const int BUFFER_SIZE = MAX_PACKET_SIZE + HEADER_SIZE;
-const u8 FIRST_BYTE = 0x54;
-const u8 TYPE_DATA = 0x55;
-const u8 TYPE_FILLER = 0x56;
-const int TYPE_BYTE_INDEX = 1;
-const int LENGTH_BYTE_LSB_INDEX = 2;
-const int LENGTH_BYTE_MSB_INDEX = 3;
-
 #define PORT 12007
+#define VPN_SERVER_PORT 12008
 #define SA struct sockaddr
-
-struct Header
-{
-    u8 packet_type;
-    int packet_size;
-};
 
 
 int acceptVpnClient(){
@@ -90,18 +76,18 @@ int acceptVpnClient(){
     else {
         printf("server accept the client...\n");
     }    
-
+    return vpnClientFd;
 }
 
 int connectToVpnServer() {
-    int sockfd, connfd;
+    int sockfd;
     struct sockaddr_in servaddr, cli;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
         printf("socket creation failed...\n");
-        exit(5);
+        return -1;
     }
     else{
         printf("Socket successfully created..\n");
@@ -112,18 +98,17 @@ int connectToVpnServer() {
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(VPN_SERVER_PORT);
 
     // connect the client socket to server socket
     if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr))!= 0) {
         printf("connection with the server failed...\n");
-        exit(6);
+        return -2;
     }
     else{
         printf("connected to the server..\n");
     }
-        
-
+    return sockfd;
 }
 
 /**
@@ -136,10 +121,16 @@ int connectToVpnServer() {
 */
 int communication_session()
 {
-    int socketFd = acceptVPNClient();
-    u8 header[HEADER_SIZE];
-    u8 body[MAX_PACKET_SIZE];
-    return -1;
+    int clientFd = acceptVPNClient();
+    if (clientFd<0){
+        return -10;
+    }
+    int serverFd = connectToVpnServer();
+    if (serverFd<0){
+        return -20;
+    }
+
+    return exchange(clientFd, serverFd);
 }
 
 
