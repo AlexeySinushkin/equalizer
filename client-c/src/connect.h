@@ -1,0 +1,1 @@
+int acceptAndConnect(int* vpnClientFd, int* vpnServerFd);

@@ -10,137 +10,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
-
-typedef u_int8_t u8;
-
-const int HEADER_SIZE = 4;
-const int MAX_PACKET_SIZE = 10 * 1024;
-const int BUFFER_SIZE = MAX_PACKET_SIZE + HEADER_SIZE;
-const u8 FIRST_BYTE = 0x54;
-const u8 TYPE_DATA = 0x55;
-const u8 TYPE_FILLER = 0x56;
-const int TYPE_BYTE_INDEX = 1;
-const int LENGTH_BYTE_LSB_INDEX = 2;
-const int LENGTH_BYTE_MSB_INDEX = 3;
-
-#define PORT 12007
-#define SA struct sockaddr
-
-struct Header
-{
-    u8 packet_type;
-    int packet_size;
-};
+#include "communicate.h"
 
 
-int acceptVpnClient(){
-    int sockfd, vpnClientFd, len;
-    struct sockaddr_in servaddr, cli;
 
-    // socket create and verification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1)
-    {
-        printf("socket creation failed...\n");
-        exit(1);
-    }
-    else
-    {
-        printf("Socket successfully created..\n");
-    }
 
-    bzero(&servaddr, sizeof(servaddr));
-
-    // assign IP, PORT
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(PORT);
-
-    // Binding newly created socket to given IP and verification
-    if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
-    {
-        printf("socket bind failed...\n");
-        exit(2);
-    }
-    else
-    {
-        printf("Socket successfully binded..\n");
-    }
-
-    // Now server is ready to listen and verification
-    if ((listen(sockfd, 5)) != 0)
-    {
-        printf("Listen failed...\n");
-        exit(3);
-    }
-    else
-    {
-        printf("Server listening..\n");
-    }
-        
-    len = sizeof(cli);
-
-    // Accept the data packet from client and verification
-    vpnClientFd = accept(sockfd, (SA *)&cli, &len);
-    if (vpnClientFd < 0)
-    {
-        printf("server accept failed...\n");
-        exit(4);
-    }
-    else {
-        printf("server accept the client...\n");
-    }    
-
-}
-
-int connectToVpnServer() {
-    int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
-
-    // socket create and verification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        printf("socket creation failed...\n");
-        exit(5);
-    }
-    else{
-        printf("Socket successfully created..\n");
-    }
-        
-    bzero(&servaddr, sizeof(servaddr));
-
-    // assign IP, PORT
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
-
-    // connect the client socket to server socket
-    if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr))!= 0) {
-        printf("connection with the server failed...\n");
-        exit(6);
-    }
-    else{
-        printf("connected to the server..\n");
-    }
-        
-
-}
-
-/**
-    Принимаем входящее подключение от VPN клиента
-    Пытаемся подключиться к VPN серверу
-    Если подключиться удалось, создаем второй поток
-    В этом потоке продолжаем слать данные, в другом читать
-    (все в блокирующем режиме)
-    При поломке одного из каналов выходим и ожидаем нового подключения.
-*/
-int communication_session()
-{
-    int socketFd = acceptVPNClient();
-    u8 header[HEADER_SIZE];
-    u8 body[MAX_PACKET_SIZE];
-    return -1;
-}
 
 
 int main(int argc, char *argv[])
@@ -149,4 +23,5 @@ int main(int argc, char *argv[])
     {
         communication_session();
     }   
+
 }
