@@ -11,8 +11,11 @@
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
 
+#define PORT 12007
+#define SA struct sockaddr
+
 int acceptVpnClient(int* vpnClientFd){
-    int sockfd, vpnClientFd, len;
+    int sockfd, len;
     struct sockaddr_in servaddr, cli;
 
     // socket create and verification
@@ -59,14 +62,15 @@ int acceptVpnClient(int* vpnClientFd){
     len = sizeof(cli);
 
     // Accept the data packet from client and verification
-    vpnClientFd = accept(sockfd, (SA *)&cli, &len);
-    if (vpnClientFd < 0)
+    int clientFd = accept(sockfd, (SA *)&cli, &len);
+    if (clientFd < 0)
     {
         printf("server accept failed...\n");
         return 4;
     }
     else {
         printf("server accept the client...\n");
+        *vpnClientFd = clientFd;
     }    
     return 0;
 }
@@ -99,6 +103,7 @@ int connectToVpnServer(int* vpnServerFd) {
     }
     else{
         printf("connected to the server..\n");
+        *vpnServerFd = sockfd;
     }
     return 0;
 }

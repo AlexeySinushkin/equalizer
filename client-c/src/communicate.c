@@ -13,8 +13,7 @@
 #include "connect.h"
 #include "common.h"
 
-#define PORT 12007
-#define SA struct sockaddr
+
 
 const int HEADER_SIZE = 4;
 const int MAX_PACKET_SIZE = 10 * 1024;
