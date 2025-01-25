@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug equalizer-client",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/equalizer-client",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                //With this configuration, GDB should no longer attempt to load the missing system library source files, 
+                //and you should be able to debug your project without encountering the SourceRequest error.
+                {
+                    "description": "Ignore system libraries",
+                    "text": "set substitute-path /build/glibc-OTsEL5/glibc-2.27 ../sysdeps/unix/sysv/linux",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "logging": {
+                "engineLogging": true
+            },
+            "sourceFileMap": {
+                "./socket/../sysdeps/unix/sysv/linux": "${workspaceFolder}/src"
+            },
+            "internalConsoleOptions": "openOnSessionStart"
+        }
+    ]
+}

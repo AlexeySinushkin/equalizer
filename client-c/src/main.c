@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[])
 {
-    while (1)
+    //while (1)
     {
         communication_session();
     }   

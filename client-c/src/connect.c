@@ -10,7 +10,8 @@
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
 
-#define PORT 12007
+#define LISTEN_PORT 12005
+#define SERVER_PORT 12010
 #define SA struct sockaddr
 
 int acceptVpnClient(int* vpnClientFd){
@@ -19,7 +20,7 @@ int acceptVpnClient(int* vpnClientFd){
     struct sockaddr_in servaddr, cli;
 
     // socket create and verification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sockfd == -1)
     {
         printf("socket creation failed...\n");
@@ -30,12 +31,22 @@ int acceptVpnClient(int* vpnClientFd){
         printf("Socket successfully created..\n");
     }
 
+	/* Set socket to reuse address, otherwise bind() could return error,
+	 * when server is restarted. */
+    int ret, flag;    
+	flag = 1;
+	ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+	if(ret == -1) {
+		perror("setsockopt()");
+		return EXIT_FAILURE;
+	}
+
     bzero(&servaddr, sizeof(servaddr));
 
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(LISTEN_PORT);
 
     // Binding newly created socket to given IP and verification
     if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
@@ -94,7 +105,7 @@ int connectToVpnServer(int* vpnServerFd) {
     // assign IP, PORT
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(SERVER_PORT);
 
     // connect the client socket to server socket
     if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr))!= 0) {
