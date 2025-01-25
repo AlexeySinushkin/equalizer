@@ -1,8 +1,8 @@
 {
-    "files.associations": {
-        "types.h": "c",
-        "stdint-intn.h": "c",
-        "cstdint": "c",
-        "socket.h": "c"
-    }
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4,
+    "[makefile]": {
+        "editor.insertSpaces": false,
+        "editor.tabSize": 4
+    }    
 }

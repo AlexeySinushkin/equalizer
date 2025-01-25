@@ -7,7 +7,6 @@
 #include <netinet/in.h>
 #include <strings.h> // bzero()
 #include <errno.h>
-#include <socket.h>
 #include <arpa/inet.h> // inet_addr()
 #include <netdb.h>
 
@@ -15,7 +14,8 @@
 #define SA struct sockaddr
 
 int acceptVpnClient(int* vpnClientFd){
-    int sockfd, len;
+    int sockfd;
+    socklen_t len;
     struct sockaddr_in servaddr, cli;
 
     // socket create and verification
@@ -76,8 +76,8 @@ int acceptVpnClient(int* vpnClientFd){
 }
 
 int connectToVpnServer(int* vpnServerFd) {
-    int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
+    int sockfd;
+    struct sockaddr_in servaddr;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
