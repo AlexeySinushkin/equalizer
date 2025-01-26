@@ -19,6 +19,7 @@ mod objects;
 mod orchestrator;
 mod speed;
 mod statistic;
+mod c_client_tests;
 
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
