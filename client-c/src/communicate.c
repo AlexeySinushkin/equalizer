@@ -28,12 +28,13 @@ int read_header(int fd, struct Header *header)
     int offset = 0;
     while (offset < HEADER_SIZE && shouldWork)
     {
-        int bytesRead = read(fd, header_buf + offset, HEADER_SIZE - offset);
-        if (bytesRead <= 0)
+        int bytes_read = read(fd, header_buf + offset, HEADER_SIZE - offset);
+        if (bytes_read == -1)
         {
+            shouldWork = 0;
             return 200;
         }
-        offset += bytesRead;
+        offset += bytes_read;
     }
     if (offset < HEADER_SIZE)
     {
@@ -64,7 +65,7 @@ int write_header(int fd, struct Header *header)
     while (offset < HEADER_SIZE && shouldWork)
     {
         int written = write(fd, header_buf + offset, HEADER_SIZE - offset);
-        if (written <= 0)
+        if (written == -1)
         {
             shouldWork = 0;
             return 250;
@@ -98,7 +99,7 @@ int read_packet(int fd, u8 *buffer, struct Header *header)
     while (offset < header->packet_size && shouldWork)
     {
         int bytes_read = read(fd, buffer + offset, header->packet_size - offset);
-        if (bytes_read <= 0)
+        if (bytes_read == -1)
         {
             return 210;
         }
@@ -129,7 +130,7 @@ int serverToClientProcess(int serverFd, int clientFd)
             while (offset < header.packet_size && shouldWork)
             {
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
-                if (written <= 0)
+                if (written == -1)
                 {
                     shouldWork = 0;
                     return 221;
@@ -149,7 +150,7 @@ int clientToServerProcess(int serverFd, int clientFd)
     while (1)
     {
         int bytes_read = read(clientFd, &packet_body, MAX_BODY_SIZE);
-        if (bytes_read <=0 )
+        if (bytes_read == -1 )
         {
             shouldWork = 0;
             return 301;
@@ -202,17 +203,20 @@ int communication_session()
         */
         if (result == -1)
         {
-            fprintf(stderr, "Failed to fork:");
+            fprintf(stderr, "Failed to fork!");
             return 20;
         }
         if (result == 0)
         {
-            serverToClientProcess(vpnServerFd, vpnClientFd);
+            printf("Starting server->client  %d\n", result);   
+            int processResult = serverToClientProcess(vpnServerFd, vpnClientFd);
+            printf("Exit server->client with error code  %d\n", processResult);   
+        } else {
+            printf("Starting client->server  %d\n", result);   
+            int processResult = clientToServerProcess(vpnServerFd, vpnClientFd);
+            printf("Exit client->server with error code  %d\n", processResult);   
         }
-        if (result == 1)
-        {
-            clientToServerProcess(vpnServerFd, vpnClientFd);
-        }
+        printf("Closing pid %d\n", result);
         close(vpnClientFd);
         close(vpnServerFd);
         return 0;
