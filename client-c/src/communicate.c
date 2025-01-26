@@ -182,7 +182,7 @@ int clientToServerProcess(int serverFd, int clientFd)
     Принимаем входящее подключение от VPN клиента
     Пытаемся подключиться к VPN серверу
     Если подключиться удалось, создаем второй поток
-    В этом потоке продолжаем слать данные, в другом читать
+    В одном потоке данные идут клиент->сервер, в другом сервер->клиент
     (все в блокирующем режиме)
     При поломке одного из каналов выходим и ожидаем нового подключения.
 */
@@ -190,12 +190,34 @@ int communication_session()
 {
     int vpnClientFd;
     int vpnServerFd;
-    if (acceptAndConnect(&vpnClientFd, &vpnServerFd) == 0)
+    int connectResult = acceptAndConnect(&vpnClientFd, &vpnServerFd);
+    if (connectResult == 0)
     {
         printf("Two links established\n");
-
+        pid_t result = fork();
+        /*
+            Negative Value: The creation of a child process was unsuccessful.
+            Zero: Returned to the newly created child process.
+            Positive value: Returned to parent or caller. The value contains the process ID of the newly created child process.
+        */
+        if (result == -1)
+        {
+            fprintf(stderr, "Failed to fork:");
+            return 20;
+        }
+        if (result == 0)
+        {
+            serverToClientProcess(vpnServerFd, vpnClientFd);
+        }
+        if (result == 1)
+        {
+            clientToServerProcess(vpnServerFd, vpnClientFd);
+        }
+        close(vpnClientFd);
+        close(vpnServerFd);
+        return 0;
     }else {
         sleep(1000);
     }
-    return -1;
+    return connectResult;
 }
