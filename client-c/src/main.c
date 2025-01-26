@@ -12,8 +12,9 @@
 int main(int argc, char *argv[])
 {
     //while (1)
-    {
-        communication_session();
-    }   
+    //{
+    communication_session();
+    
+    //}   
 
 }
