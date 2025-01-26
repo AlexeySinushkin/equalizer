@@ -69,9 +69,13 @@ mod tests {
         sleep(Duration::from_millis(200));
 
         //сплиттер на стороне клиента слушает по порту 12005 и перенаправляет запросы на 12010
-        Command::new("../client-c/build/equalizer-client")
+        //запустить клиентский сплиттер
+        /*Command::new("../client-c/build/equalizer-client")
             .spawn()
-            .expect("start client side stream splitter");
+            .expect("start client side stream splitter");*/
+        // либо пробросить порты на линуксовую машину
+        // ssh -L 12005:127.0.0.1:12005 -R 12010:127.0.0.1:12010 wsl /home/user/equalizer/client-c/build/equalizer-client
+        // и запустить его там
 
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", CLIENT_PROXY_LISTEN_PORT)).unwrap();
         let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
@@ -141,9 +145,6 @@ mod tests {
     }
 
     fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
-        let mut out_file = File::create("target/client-out.bin").unwrap();
-        let mut in_file = File::create("target/client-in.bin").unwrap();
-
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
         let mut rng = rand::thread_rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
@@ -159,8 +160,6 @@ mod tests {
                     to_send_size = write_left_size
                 }
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
-                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
-
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
 
@@ -171,7 +170,6 @@ mod tests {
             //заполняем из потока данные в in_buf
             if read_size < TEST_BUF_SIZE {
                 if let Ok(read) = stream.read(&mut in_buf[read_size..]) {
-                    let _ = in_file.write_all(&in_buf[read_size..read_size + read]);
                     if read==0 {
                         sleep(Duration::from_millis(50));
                         info!("{name} Осталось отправить {write_left_size}, получить {}", TEST_BUF_SIZE-read_size);
