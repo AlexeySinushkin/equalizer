@@ -52,6 +52,7 @@ int acceptVpnClient(int* vpnClientFd){
     if ((bind(sockfd, (SA *)&servaddr, sizeof(servaddr))) != 0)
     {
         printf("socket bind failed...\n");
+        close(sockfd);
         return 2;
     }
     else
@@ -63,6 +64,7 @@ int acceptVpnClient(int* vpnClientFd){
     if ((listen(sockfd, 5)) != 0)
     {
         printf("Listen failed...\n");
+        close(sockfd);
         return 3;
     }
     else
