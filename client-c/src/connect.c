@@ -14,7 +14,7 @@
 #define SERVER_PORT 12010
 #define SA struct sockaddr
 
-int acceptVpnClient(int* vpnClientFd){
+int acceptVpnClient(int* vpnClientFd, int* listenSocketFd){
     int sockfd;
     socklen_t len;
     struct sockaddr_in servaddr, cli;
@@ -28,6 +28,7 @@ int acceptVpnClient(int* vpnClientFd){
     }
     else
     {
+        *listenSocketFd = sockfd;
         printf("Socket successfully created..\n");
     }
 
@@ -121,8 +122,8 @@ int connectToVpnServer(int* vpnServerFd) {
     return 0;
 }
 
-int acceptAndConnect(int* vpnClientFd, int* vpnServerFd) {
-    if (acceptVpnClient(vpnClientFd)==0 && connectToVpnServer(vpnServerFd)==0) {
+int acceptAndConnect(int* vpnClientFd, int* listenSocketFd, int* vpnServerFd) {
+    if (acceptVpnClient(vpnClientFd, listenSocketFd)==0 && connectToVpnServer(vpnServerFd)==0) {
         return 0;
     }
     return 7;

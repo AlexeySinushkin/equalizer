@@ -189,9 +189,10 @@ int clientToServerProcess(int serverFd, int clientFd)
 */
 int communication_session()
 {
-    int vpnClientFd;
-    int vpnServerFd;
-    int connectResult = acceptAndConnect(&vpnClientFd, &vpnServerFd);
+    int vpnClientFd = 0;
+    int listenSocketFd = 0;
+    int vpnServerFd = 0;
+    int connectResult = acceptAndConnect(&vpnClientFd, &listenSocketFd, &vpnServerFd);
     if (connectResult == 0)
     {
         printf("Two links established\n");
@@ -216,12 +217,18 @@ int communication_session()
             int processResult = clientToServerProcess(vpnServerFd, vpnClientFd);
             printf("Exit client->server with error code  %d\n", processResult);   
         }
-        printf("Closing pid %d\n", result);
+        printf("Closing. Pid %d\n", result);
         close(vpnClientFd);
         close(vpnServerFd);
+        close(listenSocketFd);
         return 0;
     }else {
-        sleep(1000);
+        if (vpnClientFd!=0){
+            close(vpnClientFd);
+        }
+        if (listenSocketFd!=0){
+            close(listenSocketFd);
+        }        
     }
     return connectResult;
 }
