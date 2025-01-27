@@ -12,6 +12,16 @@ use crate::statistic::{NoStatistic, StatisticCollector};
 Интеграционные тесты со всеми участниками
 ВПН клиент, сплиттер на стороне клиента - надо собрать проект на С в папке ../client-c
 ВПН сервер, сплиттер на стороне сервера
+
+        //сплиттер на стороне клиента слушает по порту 12005 и перенаправляет запросы на 12010
+        //запустить клиентский сплиттер
+        /*Command::new("../client-c/build/equalizer-client")
+            .spawn()
+            .expect("start client side stream splitter");*/
+        // либо пробросить порты на линуксовую машину
+        // ssh -NT -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl
+        // и запустить его там
+        // ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl /home/user/equalizer/client-c/build/equalizer-client
 */
 #[ignore]
 #[cfg(test)]
@@ -20,7 +30,7 @@ mod tests {
     use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
-    use std::process::Command;
+    use std::process::{Child, Command};
     use std::rc::Rc;
     use std::sync::mpsc;
     use std::sync::mpsc::{channel, Sender};
@@ -42,8 +52,10 @@ mod tests {
 
 
     const TEST_BUF_SIZE: usize = 100 * 1024;
-    const CLIENT_PROXY_LISTEN_PORT: u16 = 12004;
-    const PROXY_LISTEN_PORT: u16 = 12011;
+    const CLIENT_PROXY_LISTEN_PORT_WSL: u16 = 12004;
+    const CLIENT_PROXY_LISTEN_PORT: u16 = 12005;
+    const PROXY_LISTEN_PORT_WSL: u16 = 12011;
+    const PROXY_LISTEN_PORT: u16 = 12010;
     const VPN_LISTEN_PORT: u16 = 11200;
 
 
@@ -54,10 +66,27 @@ mod tests {
         //мок клиента
         client_stream: TcpStream,
         orchestrator: Orchestrator,
-        join_handle: (Sender<bool>, JoinHandle<()>)
+        join_handle: (Sender<bool>, JoinHandle<()>),
+        c_client: Option<Child>
     }
 
-    fn create_test_streams() -> TestStreams {
+    fn create_test_streams(start_client: bool) -> TestStreams {
+        let c_client = match start_client {
+            true => Some(Command::new("../client-c/build/equalizer-client")
+            .spawn()
+            .expect("start client side stream splitter")),
+            false => None
+        };
+        let client_proxy_listen_port = match start_client {
+            true => CLIENT_PROXY_LISTEN_PORT,
+            false => CLIENT_PROXY_LISTEN_PORT_WSL
+        };
+        let vpn_proxy_listen_port = match start_client {
+            true => PROXY_LISTEN_PORT,
+            false => PROXY_LISTEN_PORT_WSL
+        };
+
+
         //первым делом должен быть запущен наш OpenVPN (tcp mode)
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
 
@@ -65,20 +94,10 @@ mod tests {
         let mut orchestrator = Orchestrator::new_stat(cr_vpn, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
-        let join = start_listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, ct_vpn, cr_stop).unwrap();
+        let join = start_listen(vpn_proxy_listen_port, VPN_LISTEN_PORT, ct_vpn, cr_stop).unwrap();
         sleep(Duration::from_millis(200));
 
-        //сплиттер на стороне клиента слушает по порту 12005 и перенаправляет запросы на 12010
-        //запустить клиентский сплиттер
-        /*Command::new("../client-c/build/equalizer-client")
-            .spawn()
-            .expect("start client side stream splitter");*/
-        // либо пробросить порты на линуксовую машину
-        // ssh -NT -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl
-        // и запустить его там
-        // ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl /home/user/equalizer/client-c/build/equalizer-client
-
-        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", CLIENT_PROXY_LISTEN_PORT)).unwrap();
+        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", client_proxy_listen_port)).unwrap();
         let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
 
         trace!("Ждем подключения Заполнителя");
@@ -86,7 +105,8 @@ mod tests {
         TestStreams {vpn_stream,
             client_stream,
             orchestrator,
-            join_handle: (ct_stop, join) }
+            join_handle: (ct_stop, join),
+            c_client}
     }
 
     /**
@@ -100,12 +120,15 @@ mod tests {
         initialize_logger();
         info!("equalizer-client test");
 
+        let start_c_client = !cfg!(target_os = "windows");
+
         let TestStreams {
             vpn_stream,
             client_stream,
             mut orchestrator,
-            join_handle
-        } = create_test_streams();
+            join_handle,
+            c_client,
+        } = create_test_streams(start_c_client);
 
         sleep(Duration::from_millis(5));
         orchestrator.invoke();
@@ -128,6 +151,17 @@ mod tests {
             let stream = server_side_write_and_read(vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
             return (proxy_to_client, stream);
         }).unwrap();
+
+        if let Some(mut client) = c_client {
+            if client.stdout.is_some() {
+                let mut out_str = String::new();
+                let _ = client.stdout.take().unwrap().read_to_string(&mut out_str);
+                if out_str != "" {
+                    info!("{}", out_str);
+                }
+            }
+            let _ = client.kill();
+        }
 
         let proxy_to_vpn = join_handle_client.join().unwrap();
         let proxy_to_client = join_handle_server.join().unwrap();
