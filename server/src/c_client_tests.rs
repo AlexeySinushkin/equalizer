@@ -42,8 +42,8 @@ mod tests {
 
 
     const TEST_BUF_SIZE: usize = 100 * 1024;
-    const CLIENT_PROXY_LISTEN_PORT: u16 = 12005;
-    const PROXY_LISTEN_PORT: u16 = 12010;
+    const CLIENT_PROXY_LISTEN_PORT: u16 = 12004;
+    const PROXY_LISTEN_PORT: u16 = 12011;
     const VPN_LISTEN_PORT: u16 = 11200;
 
 
@@ -74,8 +74,9 @@ mod tests {
             .spawn()
             .expect("start client side stream splitter");*/
         // либо пробросить порты на линуксовую машину
-        // ssh -L 12005:127.0.0.1:12005 -R 12010:127.0.0.1:12010 wsl /home/user/equalizer/client-c/build/equalizer-client
+        // ssh -NT -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl
         // и запустить его там
+        // ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl /home/user/equalizer/client-c/build/equalizer-client
 
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", CLIENT_PROXY_LISTEN_PORT)).unwrap();
         let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
