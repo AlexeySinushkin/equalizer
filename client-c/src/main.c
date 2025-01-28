@@ -11,10 +11,10 @@
 
 int main(int argc, char *argv[])
 {
-    //while (1)
-    //{
-    communication_session();
-    
-    //}   
+    while (1)
+    {
+        communication_session();
+        sleep(10);
+    }   
 
 }

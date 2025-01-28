@@ -132,12 +132,14 @@ int serverToClientProcess(int serverFd, int clientFd)
             shouldWork = 0;
             return result;
         }
+       // printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
             while (offset < header.packet_size && shouldWork)
             {
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
+                printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {
                     shouldWork = 0;
@@ -157,12 +159,14 @@ int clientToServerProcess(int serverFd, int clientFd)
     
     while (1)
     {
-        int bytes_read = read(clientFd, &packet_body, MAX_BODY_SIZE);
+        int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
         if (bytes_read == -1 )
         {
             shouldWork = 0;
             return 301;
         }
+        //printf("--> Received from client %d\n", bytes_read);
+
         struct Header header = create_data_header(bytes_read);
         int write_header_result = write_header(serverFd, &header);
         if (write_header_result != 0)
@@ -170,10 +174,12 @@ int clientToServerProcess(int serverFd, int clientFd)
             shouldWork = 0;
             return write_header_result;
         }
+        
         int offset = 0;
         while (offset < header.packet_size && shouldWork)
         {
             int written = write(serverFd, packet_body + offset, header.packet_size - offset);
+            //printf("--> Forwarded to server %d\n", written);
             if (written <= 0)
             {
                 shouldWork = 0;
@@ -223,6 +229,7 @@ int communication_session()
     vpnClientFd = 0;
     listenSocketFd = 0;
     vpnServerFd = 0;
+    shouldWork = 1;
     signal(SIGINT, handle_sigint); 
     signal(SIGQUIT, handle_sigint); 
     int connectResult = acceptAndConnect(&vpnClientFd, &listenSocketFd, &vpnServerFd);
@@ -242,11 +249,11 @@ int communication_session()
         }
         if (result == 0)
         {
-            printf("Starting server->client  %d\n", result);   
+            printf("Starting server->client %d %d-%d\n", result, vpnServerFd, vpnClientFd);   
             int processResult = serverToClientProcess(vpnServerFd, vpnClientFd);
             printf("Exit server->client with error code  %d\n", processResult);   
         } else {
-            printf("Starting client->server  %d\n", result);   
+            printf("Starting client->server %d %d-%d\n", result, vpnServerFd, vpnClientFd);   
             int processResult = clientToServerProcess(vpnServerFd, vpnClientFd);
             printf("Exit client->server with error code  %d\n", processResult);   
         }
