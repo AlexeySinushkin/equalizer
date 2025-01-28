@@ -24,27 +24,15 @@ mod c_client_tests;
 fn main() {
     SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();
-    if args.len() < 4 {
-        println!("Example usage: ./equalizer 11194 1194");
-        println!("11194 - to accept vpn clients");
+    if args.len() < 3 {
+        println!("Example usage: ./equalizer 12010 1194");
+        println!("12010 - to accept vpn clients");
         println!("1194 - OpenVPN listening port (tcp)");
         print!(
             "
 On client side
-ssh -NT -L 11196:127.0.0.1:11196 -L 11194:127.0.0.1:11194  vpn_server
-then establish vpn connection to 11194:127.0.0.1
-and filler connection to 11196:127.0.0.1
-(both inside one ssh session)
-
-Filler simple example
-#!/bin/sh
-while true
-do
- nc 127.0.0.1 11196 > /dev/null
- sleep 5
-done
-
-To run as service /absolute_path/equalizer 11194 1194 11196 --service
+ssh -NT -L 12010:127.0.0.1:12010 -L vpn_server
+To run as service /absolute_path/equalizer 12010 1194 --service
 "
         );
         return;

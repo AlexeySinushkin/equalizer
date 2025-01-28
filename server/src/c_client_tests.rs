@@ -56,7 +56,7 @@ mod tests {
     const CLIENT_PROXY_LISTEN_PORT: u16 = 12005;
     const PROXY_LISTEN_PORT_WSL: u16 = 12011;
     const PROXY_LISTEN_PORT: u16 = 12010;
-    const VPN_LISTEN_PORT: u16 = 11200;
+    const VPN_LISTEN_PORT: u16 = 11294;
 
 
 
