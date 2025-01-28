@@ -2,8 +2,16 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <signal.h> 
 #include "common.h"
 #include "connect.h"
+
+#define SIGHUP  1   /* Hang up the process */ 
+#define SIGINT  2   /* Interrupt the process */ 
+#define SIGQUIT 3   /* Quit the process */ 
+#define SIGILL  4   /* Illegal instruction. */ 
+#define SIGTRAP 5   /* Trace trap. */ 
+#define SIGABRT 6   /* Abort. */
 
 const int HEADER_SIZE = 4;
 const int MAX_BODY_SIZE = 10 * 1024;
@@ -178,6 +186,29 @@ int clientToServerProcess(int serverFd, int clientFd)
 }
 
 
+volatile int vpnClientFd = 0;
+volatile int listenSocketFd = 0;
+volatile int vpnServerFd = 0;
+
+  
+// Handler for SIGINT, triggered by 
+// Ctrl-C at the keyboard 
+void handle_sigint(int sig)  { 
+    printf("Caught signal %d\n", sig); 
+    if (vpnClientFd!=0){
+        close(vpnClientFd);
+        vpnClientFd = 0;
+    }
+    if (vpnServerFd!=0){
+        close(vpnServerFd);
+        vpnServerFd = 0;
+    }    
+    if (listenSocketFd!=0){
+        close(listenSocketFd);
+        listenSocketFd = 0;
+    } 
+} 
+  
 
 /**
     Принимаем входящее подключение от VPN клиента
@@ -189,9 +220,11 @@ int clientToServerProcess(int serverFd, int clientFd)
 */
 int communication_session()
 {
-    int vpnClientFd = 0;
-    int listenSocketFd = 0;
-    int vpnServerFd = 0;
+    vpnClientFd = 0;
+    listenSocketFd = 0;
+    vpnServerFd = 0;
+    signal(SIGINT, handle_sigint); 
+    signal(SIGQUIT, handle_sigint); 
     int connectResult = acceptAndConnect(&vpnClientFd, &listenSocketFd, &vpnServerFd);
     if (connectResult == 0)
     {
@@ -218,17 +251,7 @@ int communication_session()
             printf("Exit client->server with error code  %d\n", processResult);   
         }
         printf("Closing. Pid %d\n", result);
-        close(vpnClientFd);
-        close(vpnServerFd);
-        close(listenSocketFd);
-        return 0;
-    }else {
-        if (vpnClientFd!=0){
-            close(vpnClientFd);
-        }
-        if (listenSocketFd!=0){
-            close(listenSocketFd);
-        }        
     }
+    handle_sigint(0);
     return connectResult;
 }
