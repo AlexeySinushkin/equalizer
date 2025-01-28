@@ -15,3 +15,8 @@ https://openwrt.org/docs/guide-developer/toolchain/start
 - собрать туллчейн https://openwrt.org/docs/guide-developer/toolchain/use-buildsystem
 - вызвать make
 - скопировать бинарник на роутер scp
+
+```
+make CC=mipsel-openwrt-linux-musl-gcc LD=mipsel-openwrt-linux-musl-ld
+```
+
