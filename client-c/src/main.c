@@ -14,6 +14,7 @@ int main(int argc, char *argv[])
     while (1)
     {
         communication_session();
+        printf("Sleep 10 sec\n");
         sleep(10);
     }   
 

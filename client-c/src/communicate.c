@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <signal.h> 
+#include <sys/wait.h>
 #include "common.h"
 #include "connect.h"
 
@@ -195,6 +196,7 @@ int clientToServerProcess(int serverFd, int clientFd)
 volatile int vpnClientFd = 0;
 volatile int listenSocketFd = 0;
 volatile int vpnServerFd = 0;
+volatile pid_t childPid = 0;
 
   
 // Handler for SIGINT, triggered by 
@@ -213,6 +215,14 @@ void handle_sigint(int sig)  {
         close(listenSocketFd);
         listenSocketFd = 0;
     } 
+    if (childPid!=0){
+        int s;
+        if(waitpid(childPid, &s, WNOHANG) > 0)
+        {        
+            printf("Stop child process %d\n", childPid);
+            kill(childPid, SIGKILL);        
+        }
+    } 
 } 
   
 
@@ -230,6 +240,7 @@ int communication_session()
     listenSocketFd = 0;
     vpnServerFd = 0;
     shouldWork = 1;
+    childPid = 0;
     signal(SIGINT, handle_sigint); 
     signal(SIGQUIT, handle_sigint); 
     int connectResult = acceptAndConnect(&vpnClientFd, &listenSocketFd, &vpnServerFd);
