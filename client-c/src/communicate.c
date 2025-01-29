@@ -3,9 +3,12 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <signal.h> 
-#include <sys/wait.h>
+#include <pthread.h>
+#include <bits/pthreadtypes.h>
+#include <poll.h>
 #include "common.h"
 #include "connect.h"
+
 
 #define SIGHUP  1   /* Hang up the process */ 
 #define SIGINT  2   /* Interrupt the process */ 
@@ -30,6 +33,14 @@ struct Header
     int packet_size;
 };
 volatile int shouldWork = 1;
+int clientFd = 0;
+int listenSocketFd = 0;
+int serverFd = 0;  
+// для блокировки операций с серверным сокетом
+pthread_rwlock_t rw_server;
+// для блокировки операций с клиентским сокетом
+pthread_rwlock_t rw_client;
+pthread_t childThreadId;
 
 int read_header(int fd, struct Header *header)
 {
@@ -121,13 +132,18 @@ int read_packet(int fd, u8 *buffer, struct Header *header)
     return 0;
 }
 
-int serverToClientProcess(int serverFd, int clientFd)
+
+
+void *serverToClientProcess(void *arg)
 {
+    printf("Starting server->client %d-%d\n", serverFd, clientFd);   
     u8 packet_body[MAX_BODY_SIZE];
     struct Header header;
     while (1)
     {
+        pthread_rwlock_wrlock(&rw_server);
         int result = read_packet(serverFd, packet_body, &header);
+        pthread_rwlock_unlock(&rw_server);
         if (result != 0)
         {
             shouldWork = 0;
@@ -137,30 +153,36 @@ int serverToClientProcess(int serverFd, int clientFd)
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
+            pthread_rwlock_wrlock(&rw_client);
             while (offset < header.packet_size && shouldWork)
-            {
+            {                
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
                 printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {
                     shouldWork = 0;
+                    pthread_rwlock_unlock(&rw_client);
                     return 221;
                 }
                 offset += written;
             }
+            pthread_rwlock_unlock(&rw_client);
         }
     }
     return 222;
 }
 
 
-int clientToServerProcess(int serverFd, int clientFd)
+int clientToServerProcess()
 {
+    printf("Starting client->server %d-%d\n", serverFd, clientFd);  
     u8 packet_body[MAX_BODY_SIZE];
     
     while (1)
     {
+        pthread_rwlock_wrlock(&rw_client);
         int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
+        pthread_rwlock_unlock(&rw_client);
         if (bytes_read == -1 )
         {
             shouldWork = 0;
@@ -169,10 +191,12 @@ int clientToServerProcess(int serverFd, int clientFd)
         //printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
+        pthread_rwlock_wrlock(&rw_server);
         int write_header_result = write_header(serverFd, &header);
         if (write_header_result != 0)
         {
             shouldWork = 0;
+            pthread_rwlock_unlock(&rw_server);
             return write_header_result;
         }
         
@@ -184,47 +208,43 @@ int clientToServerProcess(int serverFd, int clientFd)
             if (written <= 0)
             {
                 shouldWork = 0;
+                pthread_rwlock_unlock(&rw_server);
                 return 302;
             }
             offset += written;
         }
+        pthread_rwlock_unlock(&rw_server);
     }
     return 333;
 }
 
 
-volatile int vpnClientFd = 0;
-volatile int listenSocketFd = 0;
-volatile int vpnServerFd = 0;
-volatile pid_t childPid = 0;
 
   
 // Handler for SIGINT, triggered by 
 // Ctrl-C at the keyboard 
 void handle_sigint(int sig)  { 
     printf("Caught signal %d\n", sig); 
-    if (vpnClientFd!=0){
-        close(vpnClientFd);
-        vpnClientFd = 0;
+    if (clientFd!=0){
+        close(clientFd);
+        clientFd = 0;
     }
-    if (vpnServerFd!=0){
-        close(vpnServerFd);
-        vpnServerFd = 0;
+    if (serverFd!=0){
+        close(serverFd);
+        serverFd = 0;
     }    
     if (listenSocketFd!=0){
         close(listenSocketFd);
         listenSocketFd = 0;
     } 
-    if (childPid!=0){ 
-        printf("Stop child process %d\n", childPid);
-        kill(childPid, SIGKILL); 
-    }
+    
+    pthread_exit(&childThreadId);
+    
     if (sig == SIGINT || sig == SIGQUIT)
     {
         exit(0);
     }
 } 
-  
 
 /**
     Принимаем входящее подключение от VPN клиента
@@ -236,38 +256,30 @@ void handle_sigint(int sig)  {
 */
 int communication_session()
 {
-    vpnClientFd = 0;
+    clientFd = 0;
     listenSocketFd = 0;
-    vpnServerFd = 0;
+    serverFd = 0;
     shouldWork = 1;
-    childPid = 0;
+
     signal(SIGINT, handle_sigint); 
     signal(SIGQUIT, handle_sigint); 
-    int connectResult = acceptAndConnect(&vpnClientFd, &listenSocketFd, &vpnServerFd);
+    int connectResult = acceptAndConnect(&clientFd, &listenSocketFd, &serverFd);
     if (connectResult == 0)
     {
         printf("Two links established\n");
-        childPid = fork();
-        /*
-            Negative Value: The creation of a child process was unsuccessful.
-            Zero: Returned to the newly created child process.
-            Positive value: Returned to parent or caller. The value contains the process ID of the newly created child process.
-        */
-        if (childPid == -1)
-        {
-            fprintf(stderr, "Failed to fork!");
-            return 20;
+        pthread_rwlock_init(&rw_server, NULL); 
+        pthread_rwlock_init(&rw_client, NULL); 
+
+        
+
+        if (pthread_create(&childThreadId, NULL, serverToClientProcess, NULL) != 0) {
+            perror("pthread_create error");
+            return 500;
         }
-        if (childPid == 0)
-        {
-            printf("Starting server->client %d-%d\n", vpnServerFd, vpnClientFd);   
-            int processResult = serverToClientProcess(vpnServerFd, vpnClientFd);
-            printf("Exit server->client with error code  %d\n", processResult);   
-        } else {
-            printf("Starting client->server %d %d-%d\n", childPid, vpnServerFd, vpnClientFd);   
-            int processResult = clientToServerProcess(vpnServerFd, vpnClientFd);
-            printf("Exit client->server with error code  %d\n", processResult);   
-        }
+         
+        int processResult = clientToServerProcess();
+        printf("Exit client->server with error code  %d\n", processResult);   
+
     }
     handle_sigint(0);
     return connectResult;

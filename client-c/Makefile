@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -std=c99 -g -D_POSIX_C_SOURCE -O0
+CFLAGS= -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/bits  -Wall -std=gnu99 -lpthread -g -D_POSIX_C_SOURCE -O0
 LDFLAGS=-pthread -lrt
 SRC_DIR=src
 OBJ_DIR=obj

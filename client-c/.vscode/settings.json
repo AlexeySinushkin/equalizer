@@ -4,5 +4,10 @@
     "[makefile]": {
         "editor.insertSpaces": false,
         "editor.tabSize": 4
-    }    
+    },
+    "files.associations": {
+        "connect.h": "c",
+        "pthreadtypes.h": "c",
+        "cstdlib": "c"
+    }
 }
