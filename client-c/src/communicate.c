@@ -36,9 +36,9 @@ int clientFd = 0;
 int listenSocketFd = 0;
 int serverFd = 0;  
 // для блокировки операций с серверным сокетом
-pthread_rwlock_t rw_server;
+//pthread_mutex_t  rw_server = PTHREAD_MUTEX_INITIALIZER;
 // для блокировки операций с клиентским сокетом
-pthread_rwlock_t rw_client;
+//pthread_mutex_t  rw_client = PTHREAD_MUTEX_INITIALIZER;
 pthread_t childThreadId;
 
 int read_header(int fd, struct Header *header)
@@ -140,37 +140,40 @@ void *serverToClientProcess(void *arg)
     struct Header header;
     while (1)
     {
-        pthread_rwlock_wrlock(&rw_server);
+        //pthread_mutex_lock(&rw_server);
         int result = read_packet(serverFd, packet_body, &header);
-        pthread_rwlock_unlock(&rw_server);
+        //pthread_mutex_unlock(&rw_server);
         if (result != 0)
         {
             shouldWork = 0;
             printf("return %d\n", result);
-            return NULL;
+            pthread_exit(NULL); 
         }
-       // printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
+        //printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
-            pthread_rwlock_wrlock(&rw_client);
+            //pthread_mutex_lock(&rw_client);
             while (offset < header.packet_size && shouldWork)
             {                
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
-                printf("<-- Forwarded to client %d\n", written);
+                //printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {
                     shouldWork = 0;
-                    pthread_rwlock_unlock(&rw_client);
+                    //pthread_mutex_unlock(&rw_client);
                     printf("return %d\n", 221);
-                    return NULL;
+                    pthread_exit(NULL); 
                 }
                 offset += written;
             }
-            pthread_rwlock_unlock(&rw_client);
+            //pthread_mutex_unlock(&rw_client);
+        }else{
+            //printf("<-- no forward for  0x%02x\n", header.packet_type);
         }
     }
     printf("return %d\n", 222);
+    pthread_exit(NULL); 
 }
 
 
@@ -181,9 +184,9 @@ int clientToServerProcess()
     
     while (1)
     {
-        pthread_rwlock_wrlock(&rw_client);
+        //pthread_mutex_lock(&rw_client);
         int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
-        pthread_rwlock_unlock(&rw_client);
+        //pthread_mutex_unlock(&rw_client);
         if (bytes_read == -1 )
         {
             shouldWork = 0;
@@ -192,12 +195,12 @@ int clientToServerProcess()
         //printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
-        pthread_rwlock_wrlock(&rw_server);
+        //pthread_mutex_lock(&rw_server);
         int write_header_result = write_header(serverFd, &header);
         if (write_header_result != 0)
         {
             shouldWork = 0;
-            pthread_rwlock_unlock(&rw_server);
+            //pthread_mutex_unlock(&rw_server);
             return write_header_result;
         }
         
@@ -209,12 +212,12 @@ int clientToServerProcess()
             if (written <= 0)
             {
                 shouldWork = 0;
-                pthread_rwlock_unlock(&rw_server);
+                //pthread_mutex_unlock(&rw_server);
                 return 302;
             }
             offset += written;
         }
-        pthread_rwlock_unlock(&rw_server);
+        //pthread_mutex_unlock(&rw_server);
     }
     return 333;
 }
@@ -267,11 +270,7 @@ int communication_session()
     int connectResult = acceptAndConnect(&clientFd, &listenSocketFd, &serverFd);
     if (connectResult == 0)
     {
-        printf("Two links established\n");
-        pthread_rwlock_init(&rw_server, NULL); 
-        pthread_rwlock_init(&rw_client, NULL); 
-
-        
+        printf("Two links established\n");       
 
         if (pthread_create(&childThreadId, NULL, serverToClientProcess, NULL) != 0) {
             perror("pthread_create error");
