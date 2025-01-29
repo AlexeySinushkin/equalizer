@@ -112,7 +112,7 @@ int connectToVpnServer(volatile int* vpnServerFd) {
 
     // connect the client socket to server socket
     if (connect(sockfd, (SA*)&servaddr, sizeof(servaddr))!= 0) {
-        printf("connection with the server failed...\n");
+        printf("connection to VPN server failed...\n");
         return 6;
     }
     else{

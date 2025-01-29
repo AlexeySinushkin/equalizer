@@ -215,14 +215,14 @@ void handle_sigint(int sig)  {
         close(listenSocketFd);
         listenSocketFd = 0;
     } 
-    if (childPid!=0){
-        int s;
-        if(waitpid(childPid, &s, WNOHANG) > 0)
-        {        
-            printf("Stop child process %d\n", childPid);
-            kill(childPid, SIGKILL);        
-        }
-    } 
+    if (childPid!=0){ 
+        printf("Stop child process %d\n", childPid);
+        kill(childPid, SIGKILL); 
+    }
+    if (sig == SIGINT || sig == SIGQUIT)
+    {
+        exit(0);
+    }
 } 
   
 
@@ -247,28 +247,27 @@ int communication_session()
     if (connectResult == 0)
     {
         printf("Two links established\n");
-        pid_t result = fork();
+        childPid = fork();
         /*
             Negative Value: The creation of a child process was unsuccessful.
             Zero: Returned to the newly created child process.
             Positive value: Returned to parent or caller. The value contains the process ID of the newly created child process.
         */
-        if (result == -1)
+        if (childPid == -1)
         {
             fprintf(stderr, "Failed to fork!");
             return 20;
         }
-        if (result == 0)
+        if (childPid == 0)
         {
-            printf("Starting server->client %d %d-%d\n", result, vpnServerFd, vpnClientFd);   
+            printf("Starting server->client %d-%d\n", vpnServerFd, vpnClientFd);   
             int processResult = serverToClientProcess(vpnServerFd, vpnClientFd);
             printf("Exit server->client with error code  %d\n", processResult);   
         } else {
-            printf("Starting client->server %d %d-%d\n", result, vpnServerFd, vpnClientFd);   
+            printf("Starting client->server %d %d-%d\n", childPid, vpnServerFd, vpnClientFd);   
             int processResult = clientToServerProcess(vpnServerFd, vpnClientFd);
             printf("Exit client->server with error code  %d\n", processResult);   
         }
-        printf("Closing. Pid %d\n", result);
     }
     handle_sigint(0);
     return connectResult;
