@@ -4,7 +4,6 @@
 #include <sys/types.h>
 #include <signal.h> 
 #include <pthread.h>
-#include <bits/pthreadtypes.h>
 #include <poll.h>
 #include "common.h"
 #include "connect.h"
@@ -147,7 +146,8 @@ void *serverToClientProcess(void *arg)
         if (result != 0)
         {
             shouldWork = 0;
-            return result;
+            printf("return %d\n", result);
+            return NULL;
         }
        // printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
         if (header.packet_type == TYPE_DATA)
@@ -162,14 +162,15 @@ void *serverToClientProcess(void *arg)
                 {
                     shouldWork = 0;
                     pthread_rwlock_unlock(&rw_client);
-                    return 221;
+                    printf("return %d\n", 221);
+                    return NULL;
                 }
                 offset += written;
             }
             pthread_rwlock_unlock(&rw_client);
         }
     }
-    return 222;
+    printf("return %d\n", 222);
 }
 
 
