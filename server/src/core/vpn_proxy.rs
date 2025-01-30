@@ -7,7 +7,7 @@ use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::INITIAL_SPEED;
 use log::{error, info, trace};
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -93,7 +93,7 @@ impl ThreadWorkingSet {
                 loop {
                     match instance.main_loop(&mut filler, &mut throttler) {
                         Err(e) => {
-                            error!("{}", e);
+                            error!("{} {}", e.ctx, e.location);
                             let _ = instance.ct_state.send(ProxyState::Broken);
                             let _ = instance.pair.client_stream.shutdown();
                             let _ = instance.pair.up_stream.shutdown();

@@ -75,9 +75,10 @@ pub fn read_packet(
         let mut offset: usize = 0;
         let mut loop_counter = 0;
         loop {
+            let buf_size = tmp_buf.len();
             //читаем не больше чем надо
             offset += read(&mut tmp_buf[offset..packet_size], stream)
-                .context("Packet body read")?;
+                .context(format!("Packet body read offset {offset}, buf_size {buf_size}, packet_size {packet_size}"))?;
             if offset == packet_size {
                 return Ok(Some(ReadPacketInfo {
                     packet_size,

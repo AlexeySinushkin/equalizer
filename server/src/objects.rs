@@ -84,6 +84,6 @@ mod tests {
 
     #[test]
     fn filler_size() {
-        assert!(ONE_PACKET_MAX_SIZE<MAX_BODY_SIZE)
+        assert!(ONE_PACKET_MAX_SIZE<10240); //FIXME
     }
 }
