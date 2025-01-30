@@ -19,7 +19,6 @@ use crate::statistic::{NoStatistic, StatisticCollector};
 ssh -NT -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl
 и запустить тест
 */
-#[ignore]
 #[cfg(test)]
 mod tests {
     use std::env::var;
@@ -97,6 +96,7 @@ mod tests {
     и другие данные ходят от сервера к клиенту
      */
     #[test]
+    #[ignore]
     fn c_client_test() {
         initialize_logger();
         info!("equalizer-client test");
