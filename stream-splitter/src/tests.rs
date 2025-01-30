@@ -18,7 +18,7 @@ pub mod test_init {
 #[cfg(test)]
 mod tests {
     use crate::client_side_split::split_client_stream;
-    use crate::packet::{create_packet_header, TYPE_DATA};
+    use crate::packet::{create_packet_header, MAX_BODY_SIZE, TYPE_DATA};
     use crate::server_side_split::split_server_stream;
     use crate::tests::test_init::initialize_logger;
     use log::{info};
@@ -219,4 +219,33 @@ mod tests {
         assert_eq!(size, 0);
         join_handle.join().expect("join");
     }
+
+
+    #[test]
+    fn max_body_size_test() {
+        initialize_logger();
+        let client_listener =
+            TcpListener::bind(format!("127.0.0.1:{}", 51115)).expect("bind to client port");
+        thread::spawn(move || {
+            let stream = client_listener.accept().expect("client connected").0;
+            let mut split = split_server_stream(stream);
+            let mut buf = [0; MAX_BODY_SIZE];
+            split.data_stream.write_all(&buf).unwrap();
+
+            sleep(Duration::from_millis(100));
+            let read_size = split.data_stream.read(&mut buf).expect("read data");
+            assert_eq!(MAX_BODY_SIZE, read_size);
+        });
+        
+        sleep(Duration::from_millis(100));
+        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", 51115)).unwrap();
+        let split = split_client_stream(client_stream);
+        let mut buf = [0; MAX_BODY_SIZE];
+        let read_size = split.data_stream.read(&mut buf).expect("read data");
+        assert_eq!(MAX_BODY_SIZE, read_size);
+
+        sleep(Duration::from_millis(100));
+        split.data_stream.write_all(&buf).unwrap();
+    }
+
 }

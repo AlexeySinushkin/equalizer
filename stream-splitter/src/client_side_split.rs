@@ -60,7 +60,7 @@ impl CommonDataStream {
         let filler_pending_queue: VecDeque<QueuedPacket> = VecDeque::new();
         Self {
             client_stream : RefCell::new(client_stream),
-            temp_buf: RefCell::new([0; BUFFER_SIZE]),
+            temp_buf: RefCell::new([0; MAX_BODY_SIZE]),
             data_pending_queue: RefCell::new(data_pending_queue),
             filler_pending_queue: RefCell::new(filler_pending_queue)
         }

@@ -9,8 +9,8 @@ use std::time::Duration;
    0x54[1], тип[1], размер[2]
 */
 pub const HEADER_SIZE: usize = 4;
-pub const MAX_PACKET_SIZE: usize = 10 * 1024;
-pub const BUFFER_SIZE: usize = MAX_PACKET_SIZE + HEADER_SIZE;
+pub const MAX_BODY_SIZE: usize = 10 * 1024;
+
 pub const FIRST_BYTE: u8 = 0x54;
 pub const TYPE_DATA: u8 = 0x55;
 pub const TYPE_FILLER: u8 = 0x56;
@@ -19,7 +19,7 @@ pub const LENGTH_BYTE_LSB_INDEX: usize = 2;
 pub const LENGTH_BYTE_MSB_INDEX: usize = 3;
 pub const DATA_BYTE_INDEX: usize = HEADER_SIZE;
 
-pub type Buffer = [u8; BUFFER_SIZE];
+pub type Buffer = [u8; MAX_BODY_SIZE];
 
 struct Header {
     packet_type: u8,
@@ -43,7 +43,7 @@ pub struct QueuedPacket {
 impl QueuedPacket {
     pub fn copy_from(buf: &[u8]) -> QueuedPacket {
         let mut packet = QueuedPacket {
-            buf: [0; BUFFER_SIZE],
+            buf: [0; MAX_BODY_SIZE],
             len: 0,
         };
         packet.buf[..buf.len()].copy_from_slice(buf);
@@ -118,7 +118,7 @@ fn read_header(stream: &mut TcpStream) -> Result<Option<Header>, Error> {
     }
     let packet_size =
         calculate_packet_size(&header_buf, offset).context("Packet size calculation")?;
-    if packet_size > MAX_PACKET_SIZE {
+    if packet_size > MAX_BODY_SIZE {
         bail!("Недопустимый размер пакета")
     }
     Ok(Some(Header {

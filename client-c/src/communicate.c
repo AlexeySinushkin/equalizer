@@ -192,7 +192,7 @@ int clientToServerProcess()
             shouldWork = 0;
             return 301;
         }
-        //printf("--> Received from client %d\n", bytes_read);
+        printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
         //pthread_mutex_lock(&rw_server);
@@ -208,7 +208,7 @@ int clientToServerProcess()
         while (offset < header.packet_size && shouldWork)
         {
             int written = write(serverFd, packet_body + offset, header.packet_size - offset);
-            //printf("--> Forwarded to server %d\n", written);
+            printf("--> Forwarded to server %d\n", written);
             if (written <= 0)
             {
                 shouldWork = 0;

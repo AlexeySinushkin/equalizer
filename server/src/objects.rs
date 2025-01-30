@@ -4,6 +4,7 @@ use splitter::DataStream;
 
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
 pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
+
 pub const MAX_STAT_COUNT: usize = 10;
 pub struct Packet {
     pub size: usize,
@@ -75,4 +76,14 @@ pub enum ProxyState {
     SetupComplete,
     Info(HotPotatoInfo),
     Broken,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::objects::ONE_PACKET_MAX_SIZE;
+
+    #[test]
+    fn filler_size() {
+        assert!(ONE_PACKET_MAX_SIZE<MAX_BODY_SIZE)
+    }
 }
