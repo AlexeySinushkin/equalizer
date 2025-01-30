@@ -36,9 +36,9 @@ int clientFd = 0;
 int listenSocketFd = 0;
 int serverFd = 0;  
 // для блокировки операций с серверным сокетом
-//pthread_mutex_t  rw_server = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t  rw_server = PTHREAD_MUTEX_INITIALIZER;
 // для блокировки операций с клиентским сокетом
-//pthread_mutex_t  rw_client = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t  rw_client = PTHREAD_MUTEX_INITIALIZER;
 pthread_t childThreadId;
 
 int read_header(int fd, struct Header *header)
@@ -139,9 +139,9 @@ void *serverToClientProcess(void *arg)
     struct Header header;
     while (1)
     {
-        //pthread_mutex_lock(&rw_server);
+        pthread_mutex_lock(&rw_server);
         int result = read_packet(serverFd, packet_body, &header);
-        //pthread_mutex_unlock(&rw_server);
+        pthread_mutex_unlock(&rw_server);
         if (result != 0)
         {            
             printf("return %d\n", result);
@@ -151,20 +151,20 @@ void *serverToClientProcess(void *arg)
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
-            //pthread_mutex_lock(&rw_client);
+            pthread_mutex_lock(&rw_client);
             while (offset < header.packet_size)
             {                
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
                 //printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {                    
-                    //pthread_mutex_unlock(&rw_client);
+                    pthread_mutex_unlock(&rw_client);
                     printf("return %d\n", 221);
                     pthread_exit(NULL); 
                 }
                 offset += written;
             }
-            //pthread_mutex_unlock(&rw_client);
+            pthread_mutex_unlock(&rw_client);
         }else{
             //printf("<-- no forward for  0x%02x\n", header.packet_type);
         }
@@ -181,9 +181,9 @@ int clientToServerProcess()
     
     while (1)
     {
-        //pthread_mutex_lock(&rw_client);
+        pthread_mutex_lock(&rw_client);
         int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
-        //pthread_mutex_unlock(&rw_client);
+        pthread_mutex_unlock(&rw_client);
         if (bytes_read == -1 )
         {            
             return 301;
@@ -191,11 +191,11 @@ int clientToServerProcess()
         //printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
-        //pthread_mutex_lock(&rw_server);
+        pthread_mutex_lock(&rw_server);
         int write_header_result = write_header(serverFd, &header);
         if (write_header_result != 0)
         {            
-            //pthread_mutex_unlock(&rw_server);
+            pthread_mutex_unlock(&rw_server);
             return write_header_result;
         }
         
@@ -206,12 +206,12 @@ int clientToServerProcess()
             //printf("--> Forwarded to server %d\n", written);
             if (written == -1)
             {                
-                //pthread_mutex_unlock(&rw_server);
+                pthread_mutex_unlock(&rw_server);
                 return 302;
             }
             offset += written;
         }
-        //pthread_mutex_unlock(&rw_server);
+        pthread_mutex_unlock(&rw_server);
     }
     return 333;
 }
