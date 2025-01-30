@@ -31,7 +31,7 @@ struct Header
     u8 packet_type;
     int packet_size;
 };
-volatile int shouldWork = 1;
+
 int clientFd = 0;
 int listenSocketFd = 0;
 int serverFd = 0;  
@@ -45,12 +45,11 @@ int read_header(int fd, struct Header *header)
 {
     u8 header_buf[HEADER_SIZE];
     int offset = 0;
-    while (offset < HEADER_SIZE && shouldWork)
+    while (offset < HEADER_SIZE)
     {
         int bytes_read = read(fd, header_buf + offset, HEADER_SIZE - offset);
         if (bytes_read == -1)
-        {
-            shouldWork = 0;
+        {            
             return 200;
         }
         offset += bytes_read;
@@ -80,16 +79,13 @@ int write_header(int fd, struct Header *header)
     header_buf[TYPE_BYTE_INDEX] = header->packet_type;
     header_buf[LENGTH_BYTE_LSB_INDEX] = (u8)(header->packet_size & 0xFF);
     header_buf[LENGTH_BYTE_MSB_INDEX] = (u8)((header->packet_size >> 8) & 0xFF);
-    if (header->packet_size==10240) {
-        printf("--> 10240 0x%02x 0x%02x 0x%02x 0x%02x\n", header_buf[0], header_buf[1], header_buf[2], header_buf[3]);
-    }
+
     int offset = 0;
-    while (offset < HEADER_SIZE && shouldWork)
+    while (offset < HEADER_SIZE)
     {
         int written = write(fd, header_buf + offset, HEADER_SIZE - offset);
         if (written == -1)
-        {
-            shouldWork = 0;
+        {            
             return 250;
         }
         offset += written;
@@ -118,7 +114,7 @@ int read_packet(int fd, u8 *buffer, struct Header *header)
         return head_header_result;
     }
     int offset = 0;
-    while (offset < header->packet_size && shouldWork)
+    while (offset < header->packet_size)
     {
         int bytes_read = read(fd, buffer + offset, header->packet_size - offset);
         if (bytes_read == -1)
@@ -147,8 +143,7 @@ void *serverToClientProcess(void *arg)
         int result = read_packet(serverFd, packet_body, &header);
         //pthread_mutex_unlock(&rw_server);
         if (result != 0)
-        {
-            shouldWork = 0;
+        {            
             printf("return %d\n", result);
             pthread_exit(NULL); 
         }
@@ -157,13 +152,12 @@ void *serverToClientProcess(void *arg)
         {
             int offset = 0;
             //pthread_mutex_lock(&rw_client);
-            while (offset < header.packet_size && shouldWork)
+            while (offset < header.packet_size)
             {                
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
                 //printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
-                {
-                    shouldWork = 0;
+                {                    
                     //pthread_mutex_unlock(&rw_client);
                     printf("return %d\n", 221);
                     pthread_exit(NULL); 
@@ -191,30 +185,27 @@ int clientToServerProcess()
         int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
         //pthread_mutex_unlock(&rw_client);
         if (bytes_read == -1 )
-        {
-            shouldWork = 0;
+        {            
             return 301;
         }
-        printf("--> Received from client %d\n", bytes_read);
+        //printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
         //pthread_mutex_lock(&rw_server);
         int write_header_result = write_header(serverFd, &header);
         if (write_header_result != 0)
-        {
-            shouldWork = 0;
+        {            
             //pthread_mutex_unlock(&rw_server);
             return write_header_result;
         }
         
         int offset = 0;
-        while (offset < header.packet_size && shouldWork)
+        while (offset < header.packet_size)
         {
             int written = write(serverFd, packet_body + offset, header.packet_size - offset);
-            printf("--> Forwarded to server %d\n", written);
-            if (written <= 0)
-            {
-                shouldWork = 0;
+            //printf("--> Forwarded to server %d\n", written);
+            if (written == -1)
+            {                
                 //pthread_mutex_unlock(&rw_server);
                 return 302;
             }
@@ -232,6 +223,8 @@ int clientToServerProcess()
 // Ctrl-C at the keyboard 
 void handle_sigint(int sig)  { 
     printf("Caught signal %d\n", sig); 
+    pthread_cancel(childThreadId);
+
     if (clientFd!=0){
         close(clientFd);
         clientFd = 0;
@@ -245,11 +238,9 @@ void handle_sigint(int sig)  {
         listenSocketFd = 0;
     } 
     
-    pthread_exit(&childThreadId);
-    
     if (sig == SIGINT || sig == SIGQUIT)
     {
-        exit(0);
+        exit(sig);
     }
 } 
 
@@ -266,12 +257,11 @@ int communication_session()
     clientFd = 0;
     listenSocketFd = 0;
     serverFd = 0;
-    shouldWork = 1;
 
     signal(SIGINT, handle_sigint); 
     signal(SIGQUIT, handle_sigint); 
-    int connectResult = acceptAndConnect(&clientFd, &listenSocketFd, &serverFd);
-    if (connectResult == 0)
+    int result = acceptAndConnect(&clientFd, &listenSocketFd, &serverFd);
+    if (result == 0)
     {
         printf("Two links established\n");       
 
@@ -280,10 +270,10 @@ int communication_session()
             return 500;
         }
          
-        int processResult = clientToServerProcess();
-        printf("Exit client->server with error code  %d\n", processResult);   
+        result = clientToServerProcess();
+        printf("Exit client->server with error code  %d\n", result);   
 
     }
-    handle_sigint(0);
-    return connectResult;
+    handle_sigint(result);
+    return result;
 }
