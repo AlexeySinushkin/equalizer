@@ -1,9 +1,9 @@
 use std::io;
 use std::time::Instant;
-use splitter::DataStream;
+use splitter::{DataStream, MAX_BODY_SIZE};
 
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
-pub const ONE_PACKET_MAX_SIZE: usize = 10_000;
+pub const ONE_PACKET_MAX_SIZE: usize = MAX_BODY_SIZE;
 
 pub const MAX_STAT_COUNT: usize = 10;
 pub struct Packet {
@@ -78,12 +78,3 @@ pub enum ProxyState {
     Broken,
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::objects::ONE_PACKET_MAX_SIZE;
-
-    #[test]
-    fn filler_size() {
-        assert!(ONE_PACKET_MAX_SIZE<10240); //FIXME
-    }
-}

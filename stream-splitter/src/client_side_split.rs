@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use crate::packet::*;
-use crate::{READ_START_AWAIT_TIMEOUT};
+use crate::{MAX_BODY_SIZE, READ_START_AWAIT_TIMEOUT};
 use log::debug;
 use std::net::{Shutdown, TcpStream};
 use std::rc::Rc;
