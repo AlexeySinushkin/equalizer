@@ -78,8 +78,11 @@ int write_header(int fd, struct Header *header)
     u8 header_buf[HEADER_SIZE];
     header_buf[0] = FIRST_BYTE;
     header_buf[TYPE_BYTE_INDEX] = header->packet_type;
-    header_buf[LENGTH_BYTE_LSB_INDEX] = header->packet_size & 0xFF;
-    header_buf[LENGTH_BYTE_MSB_INDEX] = (header->packet_size >> 8) & 0xFF;
+    header_buf[LENGTH_BYTE_LSB_INDEX] = (u8)(header->packet_size & 0xFF);
+    header_buf[LENGTH_BYTE_MSB_INDEX] = (u8)((header->packet_size >> 8) & 0xFF);
+    if (header->packet_size==10240) {
+        printf("--> 10240 0x%02x 0x%02x 0x%02x 0x%02x\n", header_buf[0], header_buf[1], header_buf[2], header_buf[3]);
+    }
     int offset = 0;
     while (offset < HEADER_SIZE && shouldWork)
     {
