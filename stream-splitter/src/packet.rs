@@ -5,11 +5,11 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::thread::sleep;
 use std::time::Duration;
+use crate::MAX_BODY_SIZE;
 /*
    0x54[1], тип[1], размер[2]
 */
 pub const HEADER_SIZE: usize = 4;
-pub const MAX_BODY_SIZE: usize = 10 * 1024;
 
 pub const FIRST_BYTE: u8 = 0x54;
 pub const TYPE_DATA: u8 = 0x55;
@@ -67,6 +67,9 @@ pub fn read_packet(
     tmp_buf: &mut [u8],
     stream: &mut TcpStream,
 ) -> Result<Option<ReadPacketInfo>, Error> {
+    if tmp_buf.len() < MAX_BODY_SIZE {
+        bail!("Ожидался буфер способный вместить пакета максимального размера")
+    }
     if let Some(header) = read_header(stream)? {
         let Header {
             packet_size,
@@ -74,11 +77,11 @@ pub fn read_packet(
         } = header;
         let mut offset: usize = 0;
         let mut loop_counter = 0;
+
         loop {
-            let buf_size = tmp_buf.len();
             //читаем не больше чем надо
             offset += read(&mut tmp_buf[offset..packet_size], stream)
-                .context(format!("Packet body read offset {offset}, buf_size {buf_size}, packet_size {packet_size}"))?;
+                .context(format!("Packet body read offset {offset}, packet_size {packet_size}"))?;
             if offset == packet_size {
                 return Ok(Some(ReadPacketInfo {
                     packet_size,
@@ -161,7 +164,6 @@ pub(crate) fn read(buf: &mut [u8], stream: &mut TcpStream) -> Result<usize, io::
                     debug!("{}", e.kind());
                     Err(e)
                 }
-
             }
         }
     }

@@ -18,16 +18,16 @@ pub mod test_init {
 #[cfg(test)]
 mod tests {
     use crate::client_side_split::split_client_stream;
-    use crate::packet::{create_packet_header, MAX_BODY_SIZE, TYPE_DATA};
+    use crate::packet::{create_packet_header, TYPE_DATA};
     use crate::server_side_split::split_server_stream;
     use crate::tests::test_init::initialize_logger;
-    use log::{info};
+    use log::{info, trace};
     use std::io::{ErrorKind, Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
     use std::thread::sleep;
     use std::time::Duration;
-    use crate::READ_START_AWAIT_TIMEOUT;
+    use crate::{MAX_BODY_SIZE, READ_START_AWAIT_TIMEOUT};
 
     /**
     Сервер после подключения к нему шлет
@@ -122,7 +122,7 @@ mod tests {
         initialize_logger();
         let client_listener =
             TcpListener::bind(format!("127.0.0.1:{}", 11112)).expect("bind to client port");
-        thread::spawn(move || {
+        let join_handle = thread::spawn(move || {
             let mut stream = client_listener.accept().expect("client connected").0;
             let head_buf = create_packet_header(TYPE_DATA, 1000);
             stream.write_all(&head_buf[..2]).unwrap();
@@ -133,8 +133,11 @@ mod tests {
             buf[0] = 1;
             for _i in 0..10 {
                 stream.write_all(&buf).unwrap();
+                stream.flush().unwrap();
+                trace!("written 100 bytes");
                 sleep(Duration::from_millis(3));
             }
+            return stream;
         });
         sleep(Duration::from_millis(100));
 
@@ -142,6 +145,7 @@ mod tests {
         let split = split_client_stream(client_stream);
         let mut buf = [0; 1000];
         let _ = split.data_stream.read(&mut buf).expect("read data");
+        join_handle.join().unwrap();
         assert_eq!(1u8, buf[900]);
     }
 
@@ -201,6 +205,7 @@ mod tests {
                 .expect("Должен быть не блокирующий метод чтения");
             let _clone = client_stream.try_clone().unwrap();
             sleep(Duration::from_secs(2));
+            return client_stream;
         });
 
         let incoming_stream = client_listener.accept().expect("client connected").0;
@@ -212,7 +217,7 @@ mod tests {
         let mut split = split_server_stream(incoming_stream);
 
         info!("Begin read data");
-        let mut buf = [0; 10];
+        let mut buf = [0; MAX_BODY_SIZE];
         //читаем 0 (количество прочитанного), если ничего не прочитали
         let size = split.data_stream.read(&mut buf[..]).unwrap();
 
