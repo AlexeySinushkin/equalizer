@@ -10,8 +10,10 @@
 #include <sys/time.h>  // Include for timeval
 #include <netinet/in.h>
 #include <unistd.h>
+#include <errno.h>
 #include "common.h"
 #include "connect.h"
+
 
 
 #define SIGHUP  1   /* Hang up the process */ 
@@ -46,37 +48,22 @@ pthread_mutex_t  rw_server = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t  rw_client = PTHREAD_MUTEX_INITIALIZER;
 pthread_t childThreadId;
 pthread_t serverThreadId;
+int serverReadOffset = 0;
 
-int read_header(int fd, struct Header *header)
+enum ReadResult{
+    READ_INCOMPLETE,
+    READ_COMPLETE,
+    READ_ERROR
+};
+
+struct Header create_data_header(int packet_size)
 {
-    u8 header_buf[HEADER_SIZE];
-    int offset = 0;
-    while (offset < HEADER_SIZE)
-    {
-        int bytes_read = read(fd, header_buf + offset, HEADER_SIZE - offset);
-        if (bytes_read == -1)
-        {            
-            return 200;
-        }
-        offset += bytes_read;
-    }
-    if (offset < HEADER_SIZE)
-    {
-        return 201;
-    }
-    if (header_buf[0] != FIRST_BYTE)
-    {
-        return 202;
-    }
-    int packet_size = (header_buf[LENGTH_BYTE_MSB_INDEX] << 8) + header_buf[LENGTH_BYTE_LSB_INDEX];
-    if (packet_size > MAX_BODY_SIZE)
-    {
-        return 203;
-    }
-    header->packet_type = header_buf[TYPE_BYTE_INDEX];
-    header->packet_size = packet_size;
-    return 0;
+    struct Header header;
+    header.packet_type = TYPE_DATA;
+    header.packet_size = packet_size;
+    return header;
 }
+
 
 int write_header(int fd, struct Header *header)
 {
@@ -103,37 +90,74 @@ int write_header(int fd, struct Header *header)
     return 0;
 }
 
-struct Header create_data_header(int packet_size)
+enum ReadResult read_header(int fd, u8 *buffer, struct Header *header)
 {
-    struct Header header;
-    header.packet_type = TYPE_DATA;
-    header.packet_size = packet_size;
-    return header;
+    if (serverReadOffset < HEADER_SIZE)
+    {
+        int bytes_read = read(fd, buffer + serverReadOffset, HEADER_SIZE - serverReadOffset);
+        if (bytes_read == 0)
+        {            
+            return READ_ERROR;
+        } else if (bytes_read == -1){
+            // Read failed, check errno
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return READ_INCOMPLETE;
+            } else {
+                return READ_ERROR;
+            }
+        }
+        serverReadOffset += bytes_read;
+    }
+    if (serverReadOffset == HEADER_SIZE)
+    {
+        if (buffer[0] != FIRST_BYTE)
+        {
+            return READ_ERROR;
+        }
+        int packet_size = (buffer[LENGTH_BYTE_MSB_INDEX] << 8) + buffer[LENGTH_BYTE_LSB_INDEX];
+        if (packet_size > MAX_BODY_SIZE)
+        {
+            return READ_ERROR;
+        }
+        header->packet_type = buffer[TYPE_BYTE_INDEX];
+        header->packet_size = packet_size;
+        return READ_COMPLETE;
+    }
+    return READ_INCOMPLETE;
 }
 
 
-int read_packet(int fd, u8 *buffer, struct Header *header)
+enum ReadResult read_packet(int fd, u8 *buffer, struct Header *header)
 {
-    int head_header_result = read_header(fd, header);
-    if (head_header_result != 0)
-    {
-        return head_header_result;
+    //еще не прочитали заголовок
+    if (serverReadOffset<HEADER_SIZE){
+        enum ReadResult read_header_result = read_header(fd, buffer, header);
+        if (read_header_result == READ_ERROR || read_header_result == READ_INCOMPLETE){
+            return read_header_result;
+        } 
     }
-    int offset = 0;
-    while (offset < header->packet_size)
+
+    int rightOffset = HEADER_SIZE + header->packet_size;
+    if (serverReadOffset < rightOffset)
     {
-        int bytes_read = read(fd, buffer + offset, header->packet_size - offset);
-        if (bytes_read == -1)
-        {
-            return 210;
+        int bytes_read = read(fd, buffer + serverReadOffset, rightOffset - serverReadOffset);
+        if (bytes_read == 0)
+        {            
+            return READ_ERROR;
+        } else if (bytes_read == -1){
+            // Read failed, check errno
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return READ_INCOMPLETE;
+            } else {
+                return READ_ERROR;
+            }
         }
-        offset += bytes_read;
+        serverReadOffset += bytes_read;
     }
-    if (offset < header->packet_size)
-    {
-        return 211;
+    if (serverReadOffset == rightOffset){
+        serverReadOffset = 0;
+        return READ_COMPLETE;            
     }
-    return 0;
 }
 
 
@@ -141,26 +165,29 @@ int read_packet(int fd, u8 *buffer, struct Header *header)
 void *serverToClientProcess(void *arg)
 {
     printf("Starting server->client %d-%d\n", serverFd, clientFd);   
-    u8 packet_body[MAX_BODY_SIZE];
+    u8 buffer[HEADER_SIZE+MAX_BODY_SIZE];
     struct Header header;
     while (1)
     {
         pthread_mutex_lock(&rw_server);
-        int result = read_packet(serverFd, packet_body, &header);
+        enum ReadResult read_packet_result = read_packet(serverFd, buffer, &header);
         pthread_mutex_unlock(&rw_server);
-        if (result != 0)
+        if (read_packet_result == READ_ERROR)
         {            
-            printf("return %d\n", result);
+            printf("read server packet error\n");
             pthread_exit(NULL); 
+        }else if (read_packet_result == READ_INCOMPLETE){
+            continue;
         }
         printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
+            u8* body_offset = buffer + HEADER_SIZE;
             pthread_mutex_lock(&rw_client);
             while (offset < header.packet_size)
             {                
-                int written = write(clientFd, packet_body + offset, header.packet_size - offset);
+                int written = write(clientFd, body_offset + offset, header.packet_size - offset);
                 printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {                    
@@ -189,10 +216,22 @@ void *clientToServerProcess(void *arg)
         pthread_mutex_lock(&rw_client);
         int bytes_read = read(clientFd, packet_body, MAX_BODY_SIZE);
         pthread_mutex_unlock(&rw_client);
-        if (bytes_read == -1 )
+        if (bytes_read == 0)
         {            
             printf("return %d\n", 301);
+            pthread_exit(NULL); 
+        } else if (bytes_read == -1){
+            // Read failed, check errno
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                //Read timed out (no data received within 2ms
+                continue;
+            } else {
+                printf("Read error: %s\n", strerror(errno));
+                pthread_exit(NULL); 
+            }
         }
+
+        
         printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
@@ -265,6 +304,7 @@ int communication_session()
     clientFd = 0;
     listenSocketFd = 0;
     serverFd = 0;
+    serverReadOffset = 0;
 
     signal(SIGINT, handle_sigint); 
     signal(SIGQUIT, handle_sigint); 
@@ -272,15 +312,17 @@ int communication_session()
     if (result == 0)
     {
         printf("Two links established\n");     
-        struct timeval timeout;      
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 2000;
-    
-        if (setsockopt (clientFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) < 0){
+        struct timeval timeout1;      
+        timeout1.tv_sec = 0;
+        timeout1.tv_usec = 2000;    
+        if (setsockopt (clientFd, SOL_SOCKET, SO_RCVTIMEO, &timeout1, sizeof timeout1) < 0){
             perror("setsockopt failed\n");  
             return 502;
         }
-        if (setsockopt (serverFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) < 0){
+        struct timeval timeout2;      
+        timeout2.tv_sec = 0;
+        timeout2.tv_usec = 2000;
+        if (setsockopt (serverFd, SOL_SOCKET, SO_RCVTIMEO, &timeout2, sizeof timeout2) < 0){
             perror("setsockopt failed\n");  
             return 504;
         }

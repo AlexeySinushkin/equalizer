@@ -9,6 +9,7 @@
         "connect.h": "c",
         "pthreadtypes.h": "c",
         "cstdlib": "c",
-        "in.h": "c"
+        "in.h": "c",
+        "cerrno": "c"
     }
 }
