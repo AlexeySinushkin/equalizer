@@ -121,26 +121,23 @@ fn read_header(stream: &mut TcpStream) -> Result<Option<Header>, Error> {
         bail!("Первый байт должен быть маркером");
     }
     let packet_size =
-        calculate_packet_size(&header_buf, offset).context("Packet size calculation")?;
-    if packet_size > MAX_BODY_SIZE {
-        bail!("Недопустимый размер пакета")
-    }
+        calculate_packet_size(&header_buf).context("Packet size calculation")?;
     Ok(Some(Header {
         packet_type: header_buf[TYPE_BYTE_INDEX],
         packet_size,
     }))
 }
 
-fn calculate_packet_size(buf: &[u8], offset: usize) -> Result<usize, Error> {
-    if offset >= DATA_BYTE_INDEX {
-        let packet_size: usize =
-            ((buf[LENGTH_BYTE_MSB_INDEX] as usize) << 8) | buf[LENGTH_BYTE_LSB_INDEX] as usize;
-        if packet_size == 0 {
-            bail!("Тело пакета == 0")
-        }
-        return Ok(packet_size);
+fn calculate_packet_size(header_buf: &[u8]) -> Result<usize, Error> {
+    let packet_size: usize =
+        ((header_buf[LENGTH_BYTE_MSB_INDEX] as usize) << 8) | header_buf[LENGTH_BYTE_LSB_INDEX] as usize;
+    if packet_size == 0 {
+        bail!("Тело пакета == 0")
     }
-    Ok(0)
+    if packet_size > MAX_BODY_SIZE {
+        bail!("Недопустимый размер пакета")
+    }
+    Ok(packet_size)
 }
 
 pub fn create_packet_header(packet_type: u8, data_len: usize) -> [u8; HEADER_SIZE] {

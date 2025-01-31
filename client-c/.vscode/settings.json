@@ -8,6 +8,7 @@
     "files.associations": {
         "connect.h": "c",
         "pthreadtypes.h": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "in.h": "c"
     }
 }
