@@ -5,6 +5,11 @@
 #include <signal.h> 
 #include <pthread.h>
 #include <poll.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>  // Include for timeval
+#include <netinet/in.h>
+#include <unistd.h>
 #include "common.h"
 #include "connect.h"
 
@@ -40,6 +45,7 @@ pthread_mutex_t  rw_server = PTHREAD_MUTEX_INITIALIZER;
 // для блокировки операций с клиентским сокетом
 pthread_mutex_t  rw_client = PTHREAD_MUTEX_INITIALIZER;
 pthread_t childThreadId;
+pthread_t serverThreadId;
 
 int read_header(int fd, struct Header *header)
 {
@@ -147,7 +153,7 @@ void *serverToClientProcess(void *arg)
             printf("return %d\n", result);
             pthread_exit(NULL); 
         }
-        //printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
+        printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
         if (header.packet_type == TYPE_DATA)
         {
             int offset = 0;
@@ -155,7 +161,7 @@ void *serverToClientProcess(void *arg)
             while (offset < header.packet_size)
             {                
                 int written = write(clientFd, packet_body + offset, header.packet_size - offset);
-                //printf("<-- Forwarded to client %d\n", written);
+                printf("<-- Forwarded to client %d\n", written);
                 if (written == -1)
                 {                    
                     pthread_mutex_unlock(&rw_client);
@@ -166,15 +172,14 @@ void *serverToClientProcess(void *arg)
             }
             pthread_mutex_unlock(&rw_client);
         }else{
-            //printf("<-- no forward for  0x%02x\n", header.packet_type);
+            printf("<-- no forward for  0x%02x\n", header.packet_type);
         }
     }
     printf("return %d\n", 222);
     pthread_exit(NULL); 
 }
 
-
-int clientToServerProcess()
+void *clientToServerProcess(void *arg)
 {
     printf("Starting client->server %d-%d\n", serverFd, clientFd);  
     u8 packet_body[MAX_BODY_SIZE];
@@ -186,9 +191,9 @@ int clientToServerProcess()
         pthread_mutex_unlock(&rw_client);
         if (bytes_read == -1 )
         {            
-            return 301;
+            printf("return %d\n", 301);
         }
-        //printf("--> Received from client %d\n", bytes_read);
+        printf("--> Received from client %d\n", bytes_read);
 
         struct Header header = create_data_header(bytes_read);
         pthread_mutex_lock(&rw_server);
@@ -196,24 +201,27 @@ int clientToServerProcess()
         if (write_header_result != 0)
         {            
             pthread_mutex_unlock(&rw_server);
-            return write_header_result;
+            printf("return %d\n", write_header_result);
+            pthread_exit(NULL); 
         }
         
         int offset = 0;
         while (offset < header.packet_size)
         {
             int written = write(serverFd, packet_body + offset, header.packet_size - offset);
-            //printf("--> Forwarded to server %d\n", written);
+            printf("--> Forwarded to server %d\n", written);
             if (written == -1)
             {                
                 pthread_mutex_unlock(&rw_server);
-                return 302;
+                printf("return %d\n", 302);
+                pthread_exit(NULL); 
             }
             offset += written;
         }
         pthread_mutex_unlock(&rw_server);
     }
-    return 333;
+    printf("return %d\n", 333);
+    pthread_exit(NULL); 
 }
 
 
@@ -263,15 +271,31 @@ int communication_session()
     int result = acceptAndConnect(&clientFd, &listenSocketFd, &serverFd);
     if (result == 0)
     {
-        printf("Two links established\n");       
-
-        if (pthread_create(&childThreadId, NULL, serverToClientProcess, NULL) != 0) {
-            perror("pthread_create error");
-            return 500;
+        printf("Two links established\n");     
+        struct timeval timeout;      
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 2000;
+    
+        if (setsockopt (clientFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) < 0){
+            perror("setsockopt failed\n");  
+            return 502;
         }
-         
-        result = clientToServerProcess();
-        printf("Exit client->server with error code  %d\n", result);   
+        if (setsockopt (serverFd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout) < 0){
+            perror("setsockopt failed\n");  
+            return 504;
+        }
+        
+
+        if (pthread_create(&childThreadId, NULL, clientToServerProcess, NULL) != 0) {
+            perror("pthread_create error");
+            return 501;
+        }
+        if (pthread_create(&serverThreadId, NULL, serverToClientProcess, NULL) != 0) {
+            perror("pthread_create error");
+            return 503;
+        }
+        pthread_join(childThreadId, NULL); 
+        pthread_join(serverThreadId, NULL); 
 
     }
     handle_sigint(result);
