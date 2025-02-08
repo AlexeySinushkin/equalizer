@@ -1,6 +1,12 @@
 Установить все, что нужно для сборки под Linux
 ```
 sudo apt-get install build-essential
+git submodule add https://git.openwrt.org/project/libubox.git
+```
+
+В проекте используется рекомендумая OpenWrt библиотека
+```
+git submodule add https://git.openwrt.org/project/libubox.git
 ```
 
 Собрать (для локальных тестов)

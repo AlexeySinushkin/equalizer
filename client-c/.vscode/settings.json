@@ -10,6 +10,9 @@
         "pthreadtypes.h": "c",
         "cstdlib": "c",
         "in.h": "c",
-        "cerrno": "c"
+        "cerrno": "c",
+        "stdio.h": "c",
+        "communicate.h": "c",
+        "uloop.h": "c"
     }
 }
