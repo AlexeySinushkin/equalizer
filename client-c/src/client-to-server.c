@@ -4,7 +4,6 @@
 #include "common.h"
 #include "packet.h"
 
-int bytes_read = 0;
 u8 packet_body_client_to_server[MAX_BODY_SIZE];
 
 
@@ -44,16 +43,16 @@ int write_header(int fd, struct Header *header)
 
 
 int on_client_rdata_available(int src_fd, int dst_fd){
-    bytes_read = read(src_fd, packet_body_client_to_server, MAX_BODY_SIZE);
+    int from_client_bytes_read = read(src_fd, packet_body_client_to_server, MAX_BODY_SIZE);
 
-    if (bytes_read <= 0)
+    if (from_client_bytes_read <= 0)
     {            
-        return bytes_read;
+        return from_client_bytes_read;
 
     }    
-    printf("--> Received from client %d\n", bytes_read);
+    printf("--> Received from client %d\n", from_client_bytes_read);
 
-    struct Header header = create_data_header(bytes_read);
+    struct Header header = create_data_header(from_client_bytes_read);
 
     int write_header_result = write_header(dst_fd, &header);
     if (write_header_result != 0)

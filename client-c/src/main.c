@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <string.h>
 #include <libubox/uloop.h>
 #include "client-to-server.h"
 #include "server-to-client.h"
