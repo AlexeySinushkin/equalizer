@@ -13,6 +13,7 @@
         "cerrno": "c",
         "stdio.h": "c",
         "communicate.h": "c",
-        "uloop.h": "c"
+        "uloop.h": "c",
+        "stdlib.h": "c"
     }
 }

@@ -8,7 +8,6 @@
 #include <libubox/uloop.h>
 #include "client-to-server.h"
 #include "server-to-client.h"
-#include "communicate.h"
 
 #define VPN_SERVER_IP   "127.0.0.1"
 #define VPN_SERVER_PORT 12010

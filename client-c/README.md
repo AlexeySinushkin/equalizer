@@ -4,9 +4,31 @@ sudo apt-get install build-essential
 git submodule add https://git.openwrt.org/project/libubox.git
 ```
 
-В проекте используется рекомендумая OpenWrt библиотека
+В проекте используется рекомендумая OpenWrt библиотека **libubox**
+
+На девелоперской машине
 ```
 git submodule add https://git.openwrt.org/project/libubox.git
+cd libubox
+mkdir build
+cd build
+cmake -DBUILD_LUA=OFF -DBUILD_EXAMPLES=OFF ..
+make
+sudo make install
+```
+
+На роутере
+```
+opkg update
+opkg install libubox
+```
+
+
+If needed, manually copy the compiled library:
+```
+sudo cp libubox.so /usr/local/lib/
+sudo cp *.h /usr/local/include/libubox/
+sudo ldconfig  # Refresh shared libraries
 ```
 
 Собрать (для локальных тестов)
