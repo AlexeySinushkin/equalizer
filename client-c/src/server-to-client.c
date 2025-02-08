@@ -8,6 +8,24 @@ int server_read_offset = 0;
 int bytes_read = 0;
 u8 buffer_server_to_client[HEADER_SIZE+MAX_BODY_SIZE];
 
+
+enum ReadResult build_header(u8 *buffer, struct Header *header){
+    if (buffer[0] != FIRST_BYTE)
+    {
+        printf("Error 52\n");
+        return READ_ERROR;
+    }
+    int packet_size = (buffer[LENGTH_BYTE_MSB_INDEX] << 8) + buffer[LENGTH_BYTE_LSB_INDEX];
+    if (packet_size > MAX_BODY_SIZE)
+    {
+        printf("Error 53\n");
+        return READ_ERROR;
+    }
+    header->packet_type = buffer[TYPE_BYTE_INDEX];
+    header->packet_size = packet_size;
+    return READ_COMPLETE;
+}
+
 enum ReadResult read_header(int fd, u8 *buffer, struct Header *header)
 {
     if (server_read_offset < HEADER_SIZE)
@@ -21,23 +39,12 @@ enum ReadResult read_header(int fd, u8 *buffer, struct Header *header)
     }
     if (server_read_offset == HEADER_SIZE)
     {
-        if (buffer[0] != FIRST_BYTE)
-        {
-            printf("Error 52\n");
-            return READ_ERROR;
-        }
-        int packet_size = (buffer[LENGTH_BYTE_MSB_INDEX] << 8) + buffer[LENGTH_BYTE_LSB_INDEX];
-        if (packet_size > MAX_BODY_SIZE)
-        {
-            printf("Error 53\n");
-            return READ_ERROR;
-        }
-        header->packet_type = buffer[TYPE_BYTE_INDEX];
-        header->packet_size = packet_size;
-        return READ_COMPLETE;
+        return build_header(buffer, header);
     }
     return READ_INCOMPLETE;
 }
+
+
 
 
 enum ReadResult read_packet(int fd, u8 *buffer, struct Header *header)
@@ -48,6 +55,9 @@ enum ReadResult read_packet(int fd, u8 *buffer, struct Header *header)
         if (read_header_result == READ_ERROR || read_header_result == READ_INCOMPLETE){
             return read_header_result;
         } 
+    }else{
+        //restore header from buffer
+        build_header(buffer, header);
     }
 
     int right_offset = HEADER_SIZE + header->packet_size;
@@ -65,6 +75,7 @@ enum ReadResult read_packet(int fd, u8 *buffer, struct Header *header)
         server_read_offset = 0;
         return READ_COMPLETE;            
     }
+    return READ_INCOMPLETE;
 }
 
 int on_server_rdata_available(int src_fd, int dst_fd){

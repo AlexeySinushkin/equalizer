@@ -73,7 +73,7 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
     }
 }
 // сразу после подключения VPN клиента, мы подключаемся к в VPN server-у
-void connect_to_server(){
+int connect_to_server(){
     struct sockaddr_in server_addr;
     int sock_fd;
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -105,6 +105,7 @@ void connect_to_server(){
     uloop_fd_add(client_ufd, ULOOP_READ);
 
     printf("Connected to server, waiting for data...\n");
+    return EXIT_SUCCESS;
 }
 
 
