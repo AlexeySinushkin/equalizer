@@ -55,25 +55,23 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
         }
         if (result == EXIT_FAILURE)
         {
-            if (errno != EWOULDBLOCK && errno != EAGAIN)
-            {
-                perror("Read error");
-                uloop_fd_delete(client_ufd);
-                close(client_ufd->fd);
-                free(client_ufd);
-                client_ufd = NULL;
-                free(client_pipe);
-                client_pipe = NULL;
+            perror("clean client-pipe resources");
+            uloop_fd_delete(client_ufd);
+            close(client_ufd->fd);
+            free(client_ufd);
+            client_ufd = NULL;
+            free(client_pipe);
+            client_pipe = NULL;
 
-                if (server_ufd != NULL)
-                {
-                    uloop_fd_delete(server_ufd);
-                    close(server_ufd->fd);
-                    free(server_ufd);
-                    server_ufd = NULL;
-                    free(server_pipe);
-                    server_pipe = NULL;
-                }
+            if (server_ufd != NULL)
+            {
+                perror("clean server-pipe resources");
+                uloop_fd_delete(server_ufd);
+                close(server_ufd->fd);
+                free(server_ufd);
+                server_ufd = NULL;
+                free(server_pipe);
+                server_pipe = NULL;
             }
         }
     }
