@@ -41,6 +41,7 @@ Install the project...
 -- Installing: /usr/local/include/libubox/vlist.h
 -- Installing: /usr/local/lib/libubox.so
 -- Installing: /usr/local/lib/libubox.a
+
 ```
 
 
@@ -72,6 +73,16 @@ https://openwrt.org/docs/guide-developer/toolchain/start
 - скопировать бинарник на роутер scp
 
 ```
-make CC=mipsel-openwrt-linux-musl-gcc LD=mipsel-openwrt-linux-musl-ld
-```
 
+cd ~/openwrt
+make distclean
+./scripts/feeds update -a
+./scripts/feeds install -a
+make menuconfig  # Reconfigure if needed
+make -j4 V=s
+make world
+make package/libs/libubox/compile V=s
+mkdir -p staging_dir/target-*/usr/lib/
+cp build_dir/target-*/libubox*/libubox.so.* staging_dir/target-*/usr/lib/
+
+```
