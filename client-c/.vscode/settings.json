@@ -15,6 +15,9 @@
         "communicate.h": "c",
         "uloop.h": "c",
         "stdlib.h": "c",
-        "types.h": "c"
+        "types.h": "c",
+        "server-to-client.h": "c",
+        "pipe.h": "c",
+        "packet.h": "c"
     }
 }

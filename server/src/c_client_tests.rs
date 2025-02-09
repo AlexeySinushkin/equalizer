@@ -18,6 +18,7 @@ use crate::statistic::{NoStatistic, StatisticCollector};
 пробросить порты
 ssh -NT -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl
 ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 wsl ~/equalizer/client-c/build/equalizer-client
+ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 o2 ~/equalizer-client
 и запустить тест
 */
 #[cfg(test)]

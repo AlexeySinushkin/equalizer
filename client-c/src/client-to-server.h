@@ -1,1 +1,1 @@
-int on_client_rdata_available(int src_fd, int dst_fd);
+int on_client_rdata_available(struct Pipe *pipe);

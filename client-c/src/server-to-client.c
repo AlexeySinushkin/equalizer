@@ -3,10 +3,7 @@
 #include <unistd.h>
 #include "common.h"
 #include "packet.h"
-
-int server_read_offset = 0;
-int bytes_read = 0;
-u8 buffer_server_to_client[HEADER_SIZE+MAX_BODY_SIZE];
+#include "pipe.h"
 
 
 enum ReadResult build_header(u8 *buffer, struct Header *header){
@@ -78,7 +75,7 @@ enum ReadResult read_packet(int fd, u8 *buffer, struct Header *header)
     return READ_INCOMPLETE;
 }
 
-int on_server_rdata_available(int src_fd, int dst_fd){
+int on_server_rdata_available(struct Pipe *pipe){
 	struct Header header;
     enum ReadResult read_packet_result = read_packet(src_fd, buffer_server_to_client, &header);
     if (read_packet_result == READ_COMPLETE)

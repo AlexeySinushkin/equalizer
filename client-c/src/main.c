@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <libubox/uloop.h>
+#include "pipe.h"
 #include "client-to-server.h"
 #include "server-to-client.h"
 
@@ -17,9 +18,11 @@
 
 struct uloop_fd server_fd;
 //для взаимодействия с клиентом
-struct uloop_fd *vpn_client_ufd;
+struct uloop_fd *client_ufd;
+struct pipe *client_pipe;
 //для взаимодействия с сервером
-struct uloop_fd *vpn_server_ufd;
+struct uloop_fd *server_ufd;
+struct pipe *server_pipe;
 
 // Function to set a socket to non-blocking mode
 void set_nonblocking(int sock) {
@@ -38,12 +41,12 @@ void set_nonblocking(int sock) {
 void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
     if (events & ULOOP_READ) {
         int bytes_read = 0; 
-        if (ufd == vpn_client_ufd) {
-            bytes_read = on_client_rdata_available(ufd->fd, vpn_server_ufd->fd);
-        } else if (ufd == vpn_server_ufd) {
-            bytes_read = on_server_rdata_available(ufd->fd, vpn_client_ufd->fd);
+        if (ufd == client_ufd) {
+            bytes_read = on_client_rdata_available(client_pipe);
+        } else if (ufd == server_ufd) {
+            bytes_read = on_server_rdata_available(server_pipe);
         } else {
-            printf("Unknown file descriptor\n");
+            printf("Unknown file descriptor. We assume only one client at once\n");
             return;
         }
         //read(ufd->fd, buffer, sizeof(buffer) - 1);
@@ -57,17 +60,21 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
         } else {
             if (errno != EWOULDBLOCK && errno != EAGAIN) {
                 perror("Read error");
-                struct uloop_fd* ufd2 = ufd==vpn_client_ufd ? vpn_server_ufd : vpn_client_ufd;
-                uloop_fd_delete(ufd);
-                close(ufd->fd);
-                free(ufd);         
-                if (ufd2 != NULL){
-                    uloop_fd_delete(ufd2);
-                    close(ufd2->fd);
-                    free(ufd2);
+                uloop_fd_delete(client_ufd);
+                close(client_ufd->fd);
+                free(client_ufd);
+                client_ufd = NULL;
+                free(client_pipe);
+                client_pipe = NULL;
+
+                if (server_ufd!=NULL){
+                    uloop_fd_delete(server_ufd);
+                    close(server_ufd->fd);
+                    free(server_ufd);
+                    server_ufd = NULL;
+                    free(server_pipe);
+                    server_pipe = NULL;
                 }
-                vpn_client_ufd = NULL;
-                vpn_server_ufd = NULL;
             }
         }
     }
@@ -98,13 +105,14 @@ int connect_to_server(){
     }
 
     // Register socket with uloop
-    struct uloop_fd *client_ufd = calloc(1, sizeof(struct uloop_fd));
-    client_ufd->fd = sock_fd;
-    client_ufd->cb = receive_data_handler;
-    vpn_server_ufd = client_ufd;
-    uloop_fd_add(client_ufd, ULOOP_READ);
+    server_ufd = calloc(1, sizeof(struct uloop_fd));
+    server_ufd->fd = sock_fd;
+    server_ufd->cb = receive_data_handler;
+    uloop_fd_add(server_ufd, ULOOP_READ);
 
     printf("Connected to server, waiting for data...\n");
+    client_pipe = calloc(1, sizeof(struct Pipe));
+    server_pipe = calloc(1, sizeof(struct Pipe));
     return EXIT_SUCCESS;
 }
 
@@ -122,12 +130,16 @@ void server_handler(struct uloop_fd *ufd, unsigned int events) {
         }
 
         printf("New connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        if (client_ufd != NULL) {
+            printf("Already have a client, closing new connection\n");
+            close(client_fd);
+            return;
+        }
         set_nonblocking(client_fd);
 
-        struct uloop_fd *client_ufd = calloc(1, sizeof(struct uloop_fd));
+        client_ufd = calloc(1, sizeof(struct uloop_fd));
         client_ufd->fd = client_fd;
         client_ufd->cb = receive_data_handler;
-        vpn_client_ufd = client_ufd;
         uloop_fd_add(client_ufd, ULOOP_READ); 
         connect_to_server();
     }
