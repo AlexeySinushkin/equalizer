@@ -18,6 +18,7 @@
         "types.h": "c",
         "server-to-client.h": "c",
         "pipe.h": "c",
-        "packet.h": "c"
+        "packet.h": "c",
+        "socket.h": "c"
     }
 }

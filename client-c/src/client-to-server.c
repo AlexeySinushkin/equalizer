@@ -5,7 +5,7 @@
 #include "common.h"
 #include "packet.h"
 #include "pipe.h"
-#include <bits/socket.h>
+#include <sys/socket.h>
 
 
 
@@ -17,9 +17,8 @@ struct Header create_data_header(int packet_size)
     return header;
 }
 
-int header_to_buf(struct Header *header, u8* header_buf)
+void header_to_buf(struct Header *header, u8* header_buf)
 {
-    u8 header_buf[HEADER_SIZE];
     header_buf[0] = FIRST_BYTE;
     header_buf[TYPE_BYTE_INDEX] = header->packet_type;
     header_buf[LENGTH_BYTE_LSB_INDEX] = (u8)(header->packet_size & 0xFF);
@@ -34,12 +33,12 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
         int sent = send(pipe->dst_fd, pipe->header_buf + pipe->offset, pipe->size - pipe->offset, MSG_NOSIGNAL);
         if (sent == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                printf("Socket is not ready for writing, try again later.\n");
+                //printf("Socket is not ready for writing, try again later.\n");
                 return EXIT_SUCCESS;  // Not an error, just need to retry later
             } else {
-                perror("Send error");
+                perror("Send to server error");
                 pipe->state = ERROR;
-                return EXIT_SUCCESS;  // Real error
+                return EXIT_FAILURE;  // Real error
             }
         }
         printf("--> Forwarded to server %d\n", sent);
@@ -54,25 +53,26 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 
 
 int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
+    printf("on_client_rdata_available %d\n", pipe->state);
     if (pipe->state == WRITING)
     {
-        write_packet(pipe);
-        if (pipe->state == WRITING)
+        int write_result = write_packet(pipe);
+        if (write_result == EXIT_FAILURE)
         {
-            pipe->read_pending = true;            
+            return EXIT_FAILURE;
         }
     }
-    if (pipe->state == READING || (pipe->state == IDLE && pipe->read_pending)){
+    if (pipe->state == READING || pipe->state == IDLE){
+        pipe->state = READING;
         int from_client_bytes_read = read(pipe->src_fd, pipe->body_buf, MAX_BODY_SIZE);
 
         if (from_client_bytes_read <= 0)
         {            
-            perrorf("Nothing was read %d\n", from_client_bytes_read);
+            fprintf(stderr, "Nothing was read %d\n", from_client_bytes_read);
             pipe->state = ERROR;
             return EXIT_FAILURE;
         }    
         printf("--> Received from client %d\n", from_client_bytes_read);
-        pipe->read_pending = false;
         struct Header header = create_data_header(from_client_bytes_read);
         header_to_buf(&header, pipe->header_buf);
         pipe->offset = 0;
@@ -80,6 +80,9 @@ int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCE
         pipe->state = WRITING;
         return write_packet(pipe);
     }
-    perrorf("Invalid state %s", pipe->state);
-    return EXIT_FAILURE;
+    if (pipe->state == ERROR)
+    {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
 }

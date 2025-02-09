@@ -18,10 +18,5 @@ struct Header
     u8 packet_type;
     int packet_size;
 };
-enum ReadResult{
-    READ_INCOMPLETE,
-    READ_COMPLETE,
-    READ_ERROR
-};
 
 #endif

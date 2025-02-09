@@ -2,6 +2,8 @@
 #include "packet.h"
 #include <stdbool.h>
 
+#ifndef _PIPE_H
+#define _PIPE_H
 enum PipeState{
     IDLE,
     READING,
@@ -16,9 +18,6 @@ struct Pipe
     int src_fd;
 	//канал для записиыц
     int dst_fd;	
-	//если в процессе отправки данных - появились данные для чтения
-	//устанавливаем этот флаг и сразу же читаем данные
-	bool read_pending;
 	//смещение буфера в процессе отправки
 	int offset;
 	//целевая длинна буфера	
@@ -26,3 +25,4 @@ struct Pipe
 	u8 header_buf[HEADER_SIZE];
 	u8 body_buf[MAX_BODY_SIZE];	
 };
+#endif

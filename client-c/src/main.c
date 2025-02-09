@@ -19,10 +19,10 @@
 struct uloop_fd server_fd;
 //для взаимодействия с клиентом
 struct uloop_fd *client_ufd;
-struct pipe *client_pipe;
+struct Pipe *client_pipe;
 //для взаимодействия с сервером
 struct uloop_fd *server_ufd;
-struct pipe *server_pipe;
+struct Pipe *server_pipe;
 
 // Function to set a socket to non-blocking mode
 void set_nonblocking(int sock) {
@@ -38,27 +38,25 @@ void set_nonblocking(int sock) {
 }
 
 // Callback for handling client connections
-void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
-    if (events & ULOOP_READ) {
-        int bytes_read = 0; 
-        if (ufd == client_ufd) {
-            bytes_read = on_client_rdata_available(client_pipe);
-        } else if (ufd == server_ufd) {
-            bytes_read = on_server_rdata_available(server_pipe);
-        } else {
-            printf("Unknown file descriptor. We assume only one client at once\n");
-            return;
+void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
+{
+    if (events & ULOOP_READ)
+    {
+        int result = 0;
+        if (ufd == client_ufd){
+            result = on_client_rdata_available(client_pipe);
         }
-        //read(ufd->fd, buffer, sizeof(buffer) - 1);
-        if (bytes_read > 0) {
-            printf("Received: %d\n", bytes_read);
-        } else if (bytes_read == 0) {
-            printf("Client disconnected.\n");
-            uloop_fd_delete(ufd);
-            close(ufd->fd);
-            free(ufd);
-        } else {
-            if (errno != EWOULDBLOCK && errno != EAGAIN) {
+        else if (ufd == server_ufd){
+            result = on_server_rdata_available(server_pipe);
+        }
+        else{
+            perror("Unknown file descriptor. We assume only one client at once\n");
+            exit(1);
+        }
+        if (result == EXIT_FAILURE)
+        {
+            if (errno != EWOULDBLOCK && errno != EAGAIN)
+            {
                 perror("Read error");
                 uloop_fd_delete(client_ufd);
                 close(client_ufd->fd);
@@ -67,7 +65,8 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
                 free(client_pipe);
                 client_pipe = NULL;
 
-                if (server_ufd!=NULL){
+                if (server_ufd != NULL)
+                {
                     uloop_fd_delete(server_ufd);
                     close(server_ufd->fd);
                     free(server_ufd);
@@ -79,6 +78,7 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events) {
         }
     }
 }
+
 // сразу после подключения VPN клиента, мы подключаемся к в VPN server-у
 int connect_to_server(){
     struct sockaddr_in server_addr;
@@ -112,7 +112,11 @@ int connect_to_server(){
 
     printf("Connected to server, waiting for data...\n");
     client_pipe = calloc(1, sizeof(struct Pipe));
+    client_pipe->src_fd = client_ufd->fd;
+    client_pipe->dst_fd = server_ufd->fd;
     server_pipe = calloc(1, sizeof(struct Pipe));
+    server_pipe->src_fd = server_ufd->fd;
+    server_pipe->dst_fd = client_ufd->fd;
     return EXIT_SUCCESS;
 }
 
