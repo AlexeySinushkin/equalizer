@@ -86,3 +86,31 @@ cp build_dir/target-*/libubox*/libubox.so.* staging_dir/target-*/usr/lib/
 opkg update
 opkg install libubox
 ```
+
+записать в /etc/init.d/qualizer 
+```
+#!/bin/sh /etc/rc.common
+
+START=89
+STOP=11
+
+start() {        
+        echo start
+        # commands to launch application
+        /root/equalizer-client &
+}                 
+
+stop() {          
+        echo stop
+        # commands to kill application 
+}
+
+```
+
+Делаем исполняемым и ссылку чтобы загружался перед openvpn 89<90
+```
+chmod +x equalizer
+cd ../rc.d
+ln -s ../init.d/equalizer S89equalizer
+
+```
