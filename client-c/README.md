@@ -45,13 +45,6 @@ Install the project...
 ```
 
 
-На роутере
-```
-opkg update
-opkg install libubox
-```
-
-
 If needed, manually copy the compiled library:
 ```
 sudo cp libubox.so /usr/local/lib/
@@ -64,7 +57,7 @@ sudo ldconfig  # Refresh shared libraries
 make
 ```
 
-Для кроссплатформенной сборки (чтоб работало на OpenWRT) изучить
+### Для кроссплатформенной сборки (чтоб работало на OpenWRT) изучить
 https://openwrt.org/docs/guide-developer/toolchain/start
 - выяснить какой процессор у вашего роутера
 - какая версия openwrt установлена
@@ -85,4 +78,11 @@ make package/libs/libubox/compile V=s
 mkdir -p staging_dir/target-*/usr/lib/
 cp build_dir/target-*/libubox*/libubox.so.* staging_dir/target-*/usr/lib/
 
+```
+
+
+На роутере
+```
+opkg update
+opkg install libubox
 ```
