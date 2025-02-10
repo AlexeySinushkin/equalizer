@@ -50,5 +50,7 @@ RUST_MIN_STACK=104857600 cargo test -- --nocapture
 
 # run as service
 ```
-sudo cp Service/equalizer.service /etc/systemd/system/equalizer.service
+sudo cp Service/equalizer.service /etc/systemd/system/equalizer-cs.service
+sudo systemctl enable equalizer-cs
+sudo systemctl start equalizer-cs
 ```
