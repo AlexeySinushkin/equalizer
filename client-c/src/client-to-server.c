@@ -53,12 +53,13 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 
 
 int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
-    printf("on_client_rdata_available %d\n", pipe->state);
+    //printf("on_client_rdata_available %d\n", pipe->state);
     if (pipe->state == WRITING)
     {
         int write_result = write_packet(pipe);
         if (write_result == EXIT_FAILURE)
         {
+            pipe->state = ERROR;
             return EXIT_FAILURE;
         }
     }
@@ -66,12 +67,21 @@ int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCE
         pipe->state = READING;
         int from_client_bytes_read = read(pipe->src_fd, pipe->body_buf, MAX_BODY_SIZE);
 
-        if (from_client_bytes_read <= 0)
-        {            
-            fprintf(stderr, "Nothing was read %d\n", from_client_bytes_read);
+        if (from_client_bytes_read==0){
+            fprintf(stderr, "Nothing was read %d %d\n", from_client_bytes_read, errno);
             pipe->state = ERROR;
             return EXIT_FAILURE;
-        }    
+        }
+        if (from_client_bytes_read == -1) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                //printf("Socket is not ready for reading, try again later.\n");
+                return EXIT_SUCCESS;  // Not an error, just need to retry later
+            } else {
+                fprintf(stderr, "Read error %d\n", errno);
+                pipe->state = ERROR;
+                return EXIT_FAILURE;  // Real error
+            }
+        }   
         printf("--> Received from client %d\n", from_client_bytes_read);
         struct Header header = create_data_header(from_client_bytes_read);
         header_to_buf(&header, pipe->header_buf);
@@ -82,6 +92,7 @@ int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCE
     }
     if (pipe->state == ERROR)
     {
+        pipe->state = ERROR;
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

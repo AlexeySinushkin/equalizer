@@ -35,7 +35,11 @@ enum ReadResult read_header(struct Pipe *pipe, struct Header *header)
 {
     if (pipe->offset < HEADER_SIZE)
     {
-        int from_server_bytes_read = read(pipe->src_fd, pipe->header_buf + pipe->offset, HEADER_SIZE - pipe->offset);
+        int from_server_bytes_read = read(pipe->src_fd, pipe->header_buf + pipe->offset, HEADER_SIZE - pipe->offset);        
+        if (from_server_bytes_read==0){
+            printf("read_header %d %d\n", from_server_bytes_read, errno);
+            return READ_ERROR;
+        }
         if (from_server_bytes_read == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 printf("Socket is not ready for writing, try again later.\n");
@@ -44,7 +48,7 @@ enum ReadResult read_header(struct Pipe *pipe, struct Header *header)
                 perror("send");
                 return READ_ERROR;  // Real error
             }
-        }
+        }        
         pipe->offset += from_server_bytes_read;
     }
     if (pipe->offset == HEADER_SIZE)
@@ -62,10 +66,8 @@ enum ReadResult read_packet(struct Pipe *pipe){
     if (pipe->offset<HEADER_SIZE){
         struct Header header;
         int read_header_result = read_header(pipe, &header);
-        if (read_header_result == READ_ERROR){
-            return EXIT_FAILURE;
-        }else if (read_header_result == READ_INCOMPLETE){
-            return EXIT_SUCCESS;
+        if (read_header_result == READ_ERROR || read_header_result == READ_INCOMPLETE){
+            return read_header_result;
         }
         pipe->size = HEADER_SIZE + header.packet_size;
     }
@@ -74,6 +76,10 @@ enum ReadResult read_packet(struct Pipe *pipe){
         while (pipe->offset < pipe->size)
         {
             int from_server_bytes_read = read(pipe->src_fd, pipe->body_buf + pipe->offset - HEADER_SIZE, pipe->size - pipe->offset);
+            if (from_server_bytes_read==0){
+                printf("read_packet %d %d\n", from_server_bytes_read, errno);
+                return READ_ERROR;
+            }
             if (from_server_bytes_read == -1) {
                 if (errno == EWOULDBLOCK || errno == EAGAIN) {
                     //printf("Socket is not ready for reading, try again later.\n");
@@ -81,7 +87,7 @@ enum ReadResult read_packet(struct Pipe *pipe){
                 } else {
                     perror("Read error");
                     pipe->state = ERROR;
-                    return EXIT_SUCCESS;  // Real error
+                    return EXIT_FAILURE;  // Real error
                 }
             }
             pipe->offset += from_server_bytes_read;
@@ -121,7 +127,7 @@ int write_packet_body(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 
 
 int on_server_rdata_available(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCESS
-    printf("on_server_rdata_available %d %d %d\n", pipe->state, pipe->offset, pipe->size);
+    //printf("on_server_rdata_available %d %d %d\n", pipe->state, pipe->offset, pipe->size);
     if (pipe->state == WRITING)
     {
         int write_result = write_packet_body(pipe);

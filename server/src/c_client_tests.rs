@@ -132,6 +132,10 @@ mod tests {
             return (proxy_to_client, stream);
         }).unwrap();
 
+        while !join_handle_client.is_finished() || !join_handle_server.is_finished() {
+            orchestrator.invoke();
+            sleep(Duration::from_millis(100));
+        }
 
         let proxy_to_vpn = join_handle_client.join().unwrap();
         let proxy_to_client = join_handle_server.join().unwrap();
@@ -143,10 +147,11 @@ mod tests {
             info!("{:#02x} {:#02x} {:#02x} {:#02x}", client_to_proxy[i], proxy_to_client.0[i],
                 proxy_to_vpn.0[i], vpn_to_proxy[i])
         }
-        join_handle.0.send(true).unwrap();
-        join_handle.1.join().unwrap();
         assert!(compare_result1);
         assert!(compare_result2);
+
+        join_handle.0.send(true).unwrap();
+        join_handle.1.join().unwrap();
     }
 
     fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {

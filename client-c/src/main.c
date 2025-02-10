@@ -106,8 +106,11 @@ int connect_to_server(){
     server_ufd = calloc(1, sizeof(struct uloop_fd));
     server_ufd->fd = sock_fd;
     server_ufd->cb = receive_data_handler;
-    uloop_fd_add(server_ufd, ULOOP_READ);
-
+    int ret = uloop_fd_add(server_ufd, ULOOP_READ);
+    if (ret < 0) {
+        perror("uloop_fd_add failed");
+        return EXIT_FAILURE;
+    }
     printf("Connected to server, waiting for data...\n");
     client_pipe = calloc(1, sizeof(struct Pipe));
     client_pipe->src_fd = client_ufd->fd;
@@ -143,7 +146,15 @@ void server_handler(struct uloop_fd *ufd, unsigned int events) {
         client_ufd->fd = client_fd;
         client_ufd->cb = receive_data_handler;
         uloop_fd_add(client_ufd, ULOOP_READ); 
-        connect_to_server();
+        int result = connect_to_server();
+        if (result == EXIT_FAILURE){
+            perror("connect_to_server");
+            perror("clean client-pipe resources");
+            uloop_fd_delete(client_ufd);
+            close(client_fd);
+            free(client_ufd);
+            client_ufd = NULL;
+        }
     }
 }
 
