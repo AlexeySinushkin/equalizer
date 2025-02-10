@@ -101,6 +101,14 @@ int connect_to_server(){
             return EXIT_FAILURE;
         }
     }
+    socklen_t errlen = sizeof(int);
+    int err = 0;
+    getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, &err, &errlen);
+    if (err != 0) {
+        printf("connect() error: %s\n", strerror(err));
+        close(sock_fd);
+        return EXIT_FAILURE;
+    }
 
     // Register socket with uloop
     server_ufd = calloc(1, sizeof(struct uloop_fd));

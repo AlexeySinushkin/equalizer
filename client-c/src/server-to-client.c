@@ -35,6 +35,7 @@ enum ReadResult read_header(struct Pipe *pipe, struct Header *header)
 {
     if (pipe->offset < HEADER_SIZE)
     {
+        //printf("Attempting to read from fd %d\n", pipe->src_fd);
         int from_server_bytes_read = read(pipe->src_fd, pipe->header_buf + pipe->offset, HEADER_SIZE - pipe->offset);        
         if (from_server_bytes_read==0){
             printf("read_header %d %d\n", from_server_bytes_read, errno);
@@ -114,7 +115,7 @@ int write_packet_body(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
                 return EXIT_FAILURE;  // Real error
             }
         }
-        printf("<-- Forwarded to client %d\n", sent);
+        //printf("<-- Forwarded to client %d\n", sent);
         pipe->offset += sent;
     }
     if (pipe->offset == pipe->size)
@@ -147,7 +148,7 @@ int on_server_rdata_available(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCES
         }else if (read_result == READ_COMPLETE){
             struct Header header;
             build_header(pipe->header_buf, &header);
-            printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
+            //printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
             if (header.packet_type == TYPE_DATA){                
                 pipe->offset = 0;
                 pipe->size = header.packet_size;

@@ -41,7 +41,7 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
                 return EXIT_FAILURE;  // Real error
             }
         }
-        printf("--> Forwarded to server %d\n", sent);
+        //printf("--> Forwarded to server %d\n", sent);
         pipe->offset += sent;
     }
     if (pipe->offset == pipe->size)
@@ -82,7 +82,7 @@ int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCE
                 return EXIT_FAILURE;  // Real error
             }
         }   
-        printf("--> Received from client %d\n", from_client_bytes_read);
+        //printf("--> Received from client %d\n", from_client_bytes_read);
         struct Header header = create_data_header(from_client_bytes_read);
         header_to_buf(&header, pipe->header_buf);
         pipe->offset = 0;
