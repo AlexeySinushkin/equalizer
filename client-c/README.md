@@ -84,7 +84,12 @@ cp build_dir/target-*/libubox*/libubox.so.* staging_dir/target-*/usr/lib/
 На роутере
 ```
 opkg update
+opkg remove kmod-usb2 kmod-usb-ledtrig-usbport kmod-usb-ehci kmod-phy-ath79-usb kmod-usb-core
 opkg install libubox
+opkg install sshtunnel --nodeps
+opkg install luci-app-sshtunnel
+dropbearkey -t rsa -f id_rsa -s 2048
+dropbearkey -y -f id_rsa | grep "ssh-rsa" > id_rsa.pub
 ```
 
 записать в /etc/init.d/qualizer 
