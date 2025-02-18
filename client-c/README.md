@@ -84,6 +84,7 @@ cp build_dir/target-*/libubox*/libubox.so.* staging_dir/target-*/usr/lib/
 На роутере
 ```
 opkg update
+opkg install iptables-nft
 opkg remove kmod-usb2 kmod-usb-ledtrig-usbport kmod-usb-ehci kmod-phy-ath79-usb kmod-usb-core
 opkg install libubox
 opkg install sshtunnel --nodeps
