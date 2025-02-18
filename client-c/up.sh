@@ -5,7 +5,7 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 #CONTROL_PANEL_IP=
 source /root/env.txt
 WAN_DEVICE=$(uci get network.wan.device)
-WAN_GATEWAY=$(ip route list default | awk '{print $3}')
+WAN_GATEWAY=$(ip route list | grep default | awk '{print $3}')
 logger "Writing to temp $WAN_GATEWAY"
 echo "$WAN_GATEWAY" > /tmp/default_gateway.txt
 TUN_PTP_GATEWAY=$(ip -4 addr show tun0 | awk '/peer/ {print $4}' | cut -d'/' -f1)
