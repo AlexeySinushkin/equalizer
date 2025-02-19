@@ -91,6 +91,8 @@ opkg install sshtunnel --nodeps
 opkg install luci-app-sshtunnel
 dropbearkey -t rsa -f id_rsa -s 2048
 dropbearkey -y -f id_rsa | grep "ssh-rsa" > id_rsa.pub
+opkg install openvpn-mbedtls
+opkg install luci-app-openvpn
 ```
 
 записать в /etc/init.d/qualizer 
