@@ -43,7 +43,6 @@ enum ReadResult read_header(struct Pipe *pipe, struct Header *header)
         }
         if (from_server_bytes_read == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                printf("Socket is not ready for writing, try again later.\n");
                 return READ_INCOMPLETE;  // Not an error, just need to retry later
             } else {
                 perror("send");
