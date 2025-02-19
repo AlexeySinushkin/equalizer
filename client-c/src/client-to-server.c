@@ -52,7 +52,7 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 }
 
 
-int on_client_rdata_available(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
+int on_client_rw_state_changed(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
     //printf("on_client_rdata_available %d\n", pipe->state);
     if (pipe->state == WRITING)
     {

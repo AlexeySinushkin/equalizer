@@ -127,7 +127,7 @@ int write_packet_body(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 }
 
 
-int on_server_rdata_available(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCESS
+int on_server_rw_state_changed(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCESS
     //printf("on_server_rdata_available %d %d %d\n", pipe->state, pipe->offset, pipe->size);
     if (pipe->state == WRITING)
     {
