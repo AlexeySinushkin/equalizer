@@ -120,16 +120,16 @@ mod tests {
         //и делая при этом паузы от 10 до 73мс
         let join_handle_client = thread::Builder::new()
             .name("test_client".to_string()).spawn(move || {
-            let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            let stream = client_side_write_and_read(client_stream, &client_to_proxy, &mut proxy_to_vpn,  "client");
-            return (proxy_to_vpn, stream);
+            let mut proxy_to_client: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
+            let stream = client_side_write_and_read(client_stream, &client_to_proxy, &mut proxy_to_client,  "client");
+            return (proxy_to_client, stream);
         }).unwrap();
 
         let join_handle_server = thread::Builder::new()
             .name("test_vpn".to_string()).spawn(move || {
-            let mut proxy_to_client: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-            let stream = server_side_write_and_read(vpn_stream, &vpn_to_proxy, &mut proxy_to_client, "vpn   ");
-            return (proxy_to_client, stream);
+            let mut proxy_to_vpn: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
+            let stream = server_side_write_and_read(vpn_stream, &vpn_to_proxy, &mut proxy_to_vpn, "vpn   ");
+            return (proxy_to_vpn, stream);
         }).unwrap();
 
         while !join_handle_client.is_finished() || !join_handle_server.is_finished() {
@@ -137,11 +137,11 @@ mod tests {
             sleep(Duration::from_millis(100));
         }
 
-        let proxy_to_vpn = join_handle_client.join().unwrap();
-        let proxy_to_client = join_handle_server.join().unwrap();
+        let proxy_to_client = join_handle_client.join().unwrap();
+        let proxy_to_vpn = join_handle_server.join().unwrap();
 
-        let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_client.0);
-        let compare_result2 = compare("vpn->client", &proxy_to_vpn.0, &vpn_to_proxy);
+        let compare_result1 = compare("client->vpn", &client_to_proxy, &proxy_to_vpn.0);
+        let compare_result2 = compare("vpn->client", &vpn_to_proxy, &proxy_to_client.0, );
 
         for i in 0..10 {
             info!("{:#02x} {:#02x} {:#02x} {:#02x}", client_to_proxy[i], proxy_to_client.0[i],
@@ -248,12 +248,11 @@ mod tests {
     }
 
     fn get_sleep_ms(rng: &mut ThreadRng) -> u16 {
-        let mut rnd: u16 = rng.random();
-        rnd = rnd & 0x3F;
+        let mut rnd: u8 = rng.random();
         if rnd < 10 {
             rnd = 10;
         }
-        rnd
+        rnd as u16
     }
 
     fn get_random_buf() -> [u8; TEST_BUF_SIZE] {
