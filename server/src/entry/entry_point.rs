@@ -18,7 +18,7 @@ pub fn start_listen(
     stop_application_request: Receiver<bool>,
 ) -> thread::Result<JoinHandle<()>> {
     let join = thread::spawn(move || {
-        let client_listener = TcpListener::bind(format!("127.0.0.1:{}", client_accept_port))
+        let client_listener = TcpListener::bind(format!("0.0.0.0:{}", client_accept_port))
             .expect("bind to client port");
         client_listener
             .set_nonblocking(true)
