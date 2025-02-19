@@ -38,3 +38,6 @@ fi
 #ip rule show
 #nft list ruleset
 #ip route show table 200
+#iperf -u -c isp --port 5001
+#iperf -u -c isp --port 53
+#tcpdump -i tun0 -n udp port 5001
