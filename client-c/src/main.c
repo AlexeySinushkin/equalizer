@@ -92,7 +92,17 @@ int connect_to_server(){
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(VPN_SERVER_PORT);
-    inet_pton(AF_INET, VPN_SERVER_IP, &server_addr.sin_addr);
+    
+    char* server_ip = getenv("VPN_SERVER_IP");
+    if (server_ip != NULL){
+        inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+        printf("server ip was setup from env VPN_SERVER_IP: %s\n", server_ip);
+    }
+    else{
+        inet_pton(AF_INET, VPN_SERVER_IP, &server_addr.sin_addr);
+        printf("server ip was not setup from env VPN_SERVER_IP. 127.0.0.1 is used\n");
+    }
+    
 
     if (connect(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         if (errno != EINPROGRESS) {
