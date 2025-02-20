@@ -37,6 +37,26 @@ void set_nonblocking(int sock) {
     }
 }
 
+void free_resources(){
+    uloop_fd_delete(client_ufd);
+    close(client_ufd->fd);
+    free(client_ufd);
+    client_ufd = NULL;
+    free(client_pipe);
+    client_pipe = NULL;
+
+    if (server_ufd != NULL)
+    {
+        perror("clean server-pipe resources");
+        uloop_fd_delete(server_ufd);
+        close(server_ufd->fd);
+        free(server_ufd);
+        server_ufd = NULL;
+        free(server_pipe);
+        server_pipe = NULL;
+    }
+}
+
 // Callback for handling client connections
 void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
 {
@@ -56,23 +76,7 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
         if (result == EXIT_FAILURE)
         {
             perror("clean client-pipe resources");
-            uloop_fd_delete(client_ufd);
-            close(client_ufd->fd);
-            free(client_ufd);
-            client_ufd = NULL;
-            free(client_pipe);
-            client_pipe = NULL;
-
-            if (server_ufd != NULL)
-            {
-                perror("clean server-pipe resources");
-                uloop_fd_delete(server_ufd);
-                close(server_ufd->fd);
-                free(server_ufd);
-                server_ufd = NULL;
-                free(server_pipe);
-                server_pipe = NULL;
-            }
+            free_resources();
         }
     }
 }
@@ -154,9 +158,8 @@ void server_handler(struct uloop_fd *ufd, unsigned int events) {
 
         printf("New connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         if (client_ufd != NULL) {
-            printf("Already have a client, closing new connection\n");
-            close(client_fd);
-            return;
+            printf("Already have a client, closing prev instance\n");
+            free_resources();
         }
         set_nonblocking(client_fd);
 
