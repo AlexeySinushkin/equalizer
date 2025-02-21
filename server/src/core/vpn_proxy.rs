@@ -133,8 +133,10 @@ impl ThreadWorkingSet {
                 filler.data_was_sent(vpn_incoming_data_size);
             } else if let Some(packet) = filler.get_fill_bytes() {
                 //trace!("=>> filler {}", packet.size);
-                self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
-                filler.filler_was_sent(packet.size);
+                //FIXME: временный хак
+                let size = packet.size/4;
+                self.pair.filler_stream.write_all(&packet.buf[..size])?;
+                filler.filler_was_sent(size);
             } else {
                 sleep(BURNOUT_DELAY);
             }
