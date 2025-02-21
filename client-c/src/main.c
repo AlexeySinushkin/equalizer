@@ -56,28 +56,106 @@ void free_resources(){
         server_pipe = NULL;
     }
 }
+void uloop_fd_mod(struct uloop_fd *ufd, unsigned int flags)
+{
+    /*
+    if (!ufd->registered)
+        return;
+
+    uloop_fd_delete(ufd);
+    uloop_fd_add(ufd, flags);    
+    */
+   ufd->flags = flags;
+}
+
+void disable_read_event(struct uloop_fd *ufd){
+    uloop_fd_mod(ufd, ufd->flags & ~ULOOP_READ);
+}
+
+void enable_read_event(struct uloop_fd *ufd){
+    uloop_fd_mod(ufd, ufd->flags | ULOOP_READ);
+}
+
+void disable_write_event(struct uloop_fd *ufd){
+    uloop_fd_mod(ufd, ufd->flags & ~ULOOP_WRITE);
+}
+
+void enable_write_event(struct uloop_fd *ufd){
+    uloop_fd_mod(ufd, ufd->flags | ULOOP_WRITE);
+}
+
+
 
 // Callback for handling client connections
 void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
 {
-    if (events & ULOOP_EVENT_MASK)
+/*
+    Изначальное состояние IDLE и готовность к чтению
+    Если закончили читать, то отключаем ожидание эвента чтения и начинаем писать
+    Если с первой попытки все разом не записали, то включаем ожидание эвента записи
+    Если записали все, то отключаем ожидание эвента записи и включаем ожидание эвента чтения
+*/
+    int result = 0;
+    struct Pipe* pipe = NULL;
+    if (ufd == client_ufd){
+        pipe = client_pipe;
+    }
+    else if (ufd == server_ufd){
+        pipe = server_pipe;
+    }
+    else{
+        perror("Unknown file descriptor. We assume only one client at once\n");
+        exit(1);
+    }        
+
+    if (events & ULOOP_READ)
     {
-        int result = 0;
-        if (ufd == client_ufd){
-            result = on_client_rw_state_changed(client_pipe);
+        int result = pipe->read(pipe);
+        if (result == EXIT_FAILURE)
+        {
+            perror("read_from_server");
+            free_resources();
+            return;
         }
-        else if (ufd == server_ufd){
-            result = on_server_rw_state_changed(server_pipe);
+        if (pipe->write_pending){
+            disable_read_event(ufd);
+            result = pipe->write(pipe);
+            //если записали только часть данных 
+            if (pipe->state==WRITING){
+                enable_write_event(ufd);
+            }else if (pipe->state==IDLE){
+                enable_read_event(ufd);
+            }
         }
-        else{
-            perror("Unknown file descriptor. We assume only one client at once\n");
-            exit(1);
+        if (result == EXIT_FAILURE || pipe->state==ERROR)
+        {
+            perror("error in read data available event\n");
+            free_resources();
+            return;
+        }
+    }
+    else if (events & ULOOP_WRITE)
+    {
+        if (pipe->state==WRITING){
+            result = pipe->write(pipe);
+            //если записали все, готовимся читать
+            if (pipe->state==IDLE){
+                enable_read_event(ufd);
+                disable_write_event(ufd);
+            }
+        }else{
+            perror("wrong state in write data available event\n");
         }
         if (result == EXIT_FAILURE)
         {
-            perror("clean client-pipe resources");
+            perror("error in write data available event\n");
             free_resources();
+            return;
         }
+    }else{
+        perror("unknown event \n");
+        free_resources();
+        return;
     }
 }
 
@@ -128,7 +206,7 @@ int connect_to_server(){
     server_ufd = calloc(1, sizeof(struct uloop_fd));
     server_ufd->fd = sock_fd;
     server_ufd->cb = receive_data_handler;
-    int ret = uloop_fd_add(server_ufd, ULOOP_EVENT_MASK);
+    int ret = uloop_fd_add(server_ufd, ULOOP_READ);
     if (ret < 0) {
         perror("uloop_fd_add failed");
         return EXIT_FAILURE;
@@ -137,9 +215,13 @@ int connect_to_server(){
     client_pipe = calloc(1, sizeof(struct Pipe));
     client_pipe->src_fd = client_ufd->fd;
     client_pipe->dst_fd = server_ufd->fd;
+    client_pipe->read = read_from_client;
+    client_pipe->write = write_to_server;
     server_pipe = calloc(1, sizeof(struct Pipe));
     server_pipe->src_fd = server_ufd->fd;
     server_pipe->dst_fd = client_ufd->fd;
+    server_pipe->read = read_from_server;
+    server_pipe->write = write_to_client;
     return EXIT_SUCCESS;
 }
 
@@ -166,7 +248,7 @@ void server_handler(struct uloop_fd *ufd, unsigned int events) {
         client_ufd = calloc(1, sizeof(struct uloop_fd));
         client_ufd->fd = client_fd;
         client_ufd->cb = receive_data_handler;
-        uloop_fd_add(client_ufd, ULOOP_EVENT_MASK); 
+        uloop_fd_add(client_ufd, ULOOP_READ); 
         int result = connect_to_server();
         if (result == EXIT_FAILURE){
             perror("connect_to_server");

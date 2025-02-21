@@ -22,6 +22,9 @@ struct Pipe
 	int offset;
 	//целевая длинна буфера	
 	int size;
+	bool write_pending;
+	int (*read)(struct Pipe *pipe);
+	int (*write)(struct Pipe *pipe);
 	u8 header_buf[HEADER_SIZE];
 	u8 body_buf[MAX_BODY_SIZE];	
 };

@@ -51,19 +51,32 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
     return EXIT_SUCCESS;
 }
 
-
-int on_client_rw_state_changed(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
-    //printf("on_client_rdata_available %d\n", pipe->state);
-    if (pipe->state == WRITING)
+int write_to_server(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
+    //printf("client-to-server write_to_server state-%d\n", pipe->state);
+    if (pipe->state == IDLE || pipe->state == WRITING)
     {
+        pipe->state = WRITING;
+        pipe->write_pending = false;
         int write_result = write_packet(pipe);
         if (write_result == EXIT_FAILURE)
         {
             pipe->state = ERROR;
             return EXIT_FAILURE;
         }
+    }else{
+        printf("Wrong state in write_to_server\n");
+        return EXIT_FAILURE;
     }
-    if (pipe->state == READING || pipe->state == IDLE){
+    if (pipe->state == ERROR)
+    {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+
+int read_from_client(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
+    //printf("client-to-server read_from_client state-%d\n", pipe->state);
+    if (pipe->state == IDLE){
         pipe->state = READING;
         int from_client_bytes_read = read(pipe->src_fd, pipe->body_buf, MAX_BODY_SIZE);
 
@@ -87,12 +100,15 @@ int on_client_rw_state_changed(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCC
         header_to_buf(&header, pipe->header_buf);
         pipe->offset = 0;
         pipe->size = HEADER_SIZE + from_client_bytes_read;
-        pipe->state = WRITING;
-        return write_packet(pipe);
+        pipe->state = IDLE;
+        pipe->write_pending = true;
+        return EXIT_SUCCESS;
+    }else{
+        printf("Wrong state in read_from_client\n");
+        return EXIT_FAILURE;
     }
     if (pipe->state == ERROR)
     {
-        pipe->state = ERROR;
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;

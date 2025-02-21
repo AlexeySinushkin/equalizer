@@ -125,18 +125,31 @@ int write_packet_body(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
     return EXIT_SUCCESS;
 }
 
-
-int on_server_rw_state_changed(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCESS
-    //printf("on_server_rdata_available %d %d %d\n", pipe->state, pipe->offset, pipe->size);
-    if (pipe->state == WRITING)
+int write_to_client(struct Pipe *pipe){
+    //printf("server-to-client write_to_client state-%d %d %d\n", pipe->state, pipe->offset, pipe->size);
+    if (pipe->state == IDLE || pipe->state == WRITING)
     {
+        pipe->state = WRITING;
+        pipe->write_pending = false;
         int write_result = write_packet_body(pipe);
         if (write_result == EXIT_FAILURE)
         {
             return EXIT_FAILURE;
         }
+    }else{
+        printf("Wrong state in write_to_client\n");
+        return EXIT_FAILURE;
     }
+    if (pipe->state == ERROR)
+    {
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
 
+
+int read_from_server(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCESS
+    //printf("server-to-client read_from_server state-%d\n", pipe->state);
     if (pipe->state == READING || pipe->state == IDLE){
         pipe->state = READING;
         enum ReadResult read_result = read_packet(pipe);
@@ -147,15 +160,12 @@ int on_server_rw_state_changed(struct Pipe *pipe){//-> EXIT_FAILURE | EXIT_SUCCE
         }else if (read_result == READ_COMPLETE){
             struct Header header;
             build_header(pipe->header_buf, &header);
+            pipe->state = IDLE;
+            pipe->offset = 0;   
+            pipe->size = header.packet_size;
             //printf("<-- Received from server 0x%02x  %d\n", header.packet_type, header.packet_size);
-            if (header.packet_type == TYPE_DATA){                
-                pipe->offset = 0;
-                pipe->size = header.packet_size;
-                pipe->state = WRITING;
-                return write_packet_body(pipe);                
-            }else{
-                pipe->state = IDLE;     
-                pipe->offset = 0;           
+            if (header.packet_type == TYPE_DATA){   
+                pipe->write_pending = true;                           
             }
         }
     }

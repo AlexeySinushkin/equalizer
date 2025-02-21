@@ -1,2 +1,3 @@
 #include "pipe.h"
-int on_server_rw_state_changed(struct Pipe *pipe);
+int read_from_server(struct Pipe *pipe);
+int write_to_client(struct Pipe *pipe);
