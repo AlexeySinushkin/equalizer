@@ -62,26 +62,60 @@ void uloop_fd_mod(struct uloop_fd *ufd, unsigned int flags)
         uloop_fd_delete(ufd);
     }    
     uloop_fd_add(ufd, flags);    
-    //printf("...done\n");
+    printf("...done\n");
 }
 
-void disable_read_event(struct uloop_fd *ufd){
-    //printf("disable_read_event %d\n", ufd->fd);
+struct uloop_fd* get_read_ufd(struct Pipe *pipe) {
+    if (pipe == client_pipe){
+        printf("<<-- ");
+       return client_ufd;
+    }
+    else if (pipe == server_pipe){
+        printf("-->> ");
+        return server_ufd;
+    }
+    else{
+        perror("Unknown file descriptor. We assume only one client at once\n");
+        exit(1);
+    }
+}
+
+void disable_read_event(struct Pipe *pipe){
+    struct uloop_fd *ufd = get_read_ufd(pipe);
+    printf("disable_read_event \n");
     uloop_fd_mod(ufd, ufd->flags & ~ULOOP_READ);
 }
 
-void enable_read_event(struct uloop_fd *ufd){
-    //printf("enable_read_event %d\n", ufd->fd);
+void enable_read_event(struct Pipe *pipe){
+    struct uloop_fd *ufd = get_read_ufd(pipe);
+    printf("enable_read_event \n");
     uloop_fd_mod(ufd, ufd->flags | ULOOP_READ);
 }
 
-void disable_write_event(struct uloop_fd *ufd){
-    //printf("disable_write_event %d\n", ufd->fd);
+struct uloop_fd* get_write_ufd(struct Pipe *pipe) {
+    if (pipe == client_pipe){
+        printf("<<-- ");
+        return server_ufd;
+    }
+    else if (pipe == server_pipe){
+        printf("-->> ");
+        return client_ufd;
+    }
+    else{
+        perror("Unknown file descriptor. We assume only one client at once\n");
+        exit(1);
+    }
+}
+
+void disable_write_event(struct Pipe *pipe){
+    struct uloop_fd *ufd = get_write_ufd(pipe);
+    printf("disable_write_event \n");
     uloop_fd_mod(ufd, ufd->flags & ~ULOOP_WRITE);
 }
 
-void enable_write_event(struct uloop_fd *ufd){
-    //printf("enable_write_event %d\n", ufd->fd);
+void enable_write_event(struct Pipe *pipe){
+    struct uloop_fd *ufd = get_write_ufd(pipe);
+    printf("enable_write_event \n");
     uloop_fd_mod(ufd, ufd->flags | ULOOP_WRITE);
 }
 
@@ -107,11 +141,22 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
     else{
         perror("Unknown file descriptor. We assume only one client at once\n");
         exit(1);
-    }        
+    }
+
+    if (pipe->state==ERROR){
+        perror("pipe broken");
+        free_resources();  
+        return; 
+    }
+
 
     if (events & ULOOP_READ)
-    {
-        int result = pipe->read(pipe);
+    {       
+        if (pipe->state==WRITING){
+            disable_read_event(pipe);
+            return;
+        }
+        result = pipe->read(pipe);
         if (result == EXIT_FAILURE)
         {
             perror("read from pipe error");
@@ -119,13 +164,11 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
             return;
         }
         if (pipe->write_pending){
-            disable_read_event(ufd);
             result = pipe->write(pipe);
             //если записали только часть данных 
             if (pipe->state==WRITING){
-                enable_write_event(ufd);
-            }else if (pipe->state==IDLE){
-                enable_read_event(ufd);
+                enable_write_event(pipe);
+                disable_read_event(pipe);
             }
         }
         if (result == EXIT_FAILURE || pipe->state==ERROR)
@@ -137,15 +180,19 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
     }
     if (events & ULOOP_WRITE)
     {
+        if (pipe->state==READING){
+            disable_write_event(pipe);
+            return;
+        }
         if (pipe->state==WRITING){
             result = pipe->write(pipe);
             //если записали все, готовимся читать
             if (pipe->state==IDLE){
-                enable_read_event(ufd);
-                disable_write_event(ufd);
+                enable_read_event(pipe);
+                disable_write_event(pipe);
             }
-        }else{
-            perror("wrong state in write data available event\n");
+        }else if (pipe->state==IDLE){
+            disable_write_event(pipe);
         }
         if (result == EXIT_FAILURE)
         {

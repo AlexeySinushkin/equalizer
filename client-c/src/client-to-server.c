@@ -30,7 +30,7 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
     while (pipe->offset < pipe->size)
     {
         //тело идет сразу за заголовком и выровнено по 4 байта - отправляем одним буфером
-        int sent = send(pipe->dst_fd, pipe->header_buf + pipe->offset, pipe->size - pipe->offset, MSG_NOSIGNAL);
+        int sent = send(pipe->dst_fd, pipe->header_buf + pipe->offset, pipe->size - pipe->offset, 0);//MSG_NOSIGNAL);
         if (sent == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 //printf("Socket is not ready for writing, try again later.\n");

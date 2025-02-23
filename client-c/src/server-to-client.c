@@ -103,7 +103,7 @@ enum ReadResult read_packet(struct Pipe *pipe){
 int write_packet_body(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
     while (pipe->offset < pipe->size)
     {        
-        int sent = send(pipe->dst_fd, pipe->body_buf + pipe->offset, pipe->size - pipe->offset, MSG_NOSIGNAL);
+        int sent = send(pipe->dst_fd, pipe->body_buf + pipe->offset, pipe->size - pipe->offset, 0);//MSG_NOSIGNAL);
         if (sent == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 //printf("Socket is not ready for writing, try again later.\n");
