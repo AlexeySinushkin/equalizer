@@ -104,7 +104,7 @@ int read_from_client(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
         pipe->write_pending = true;
         return EXIT_SUCCESS;
     }else{
-        printf("Wrong state in read_from_client\n");
+        printf("Wrong state in read_from_client %d\n", pipe->state);
         return EXIT_FAILURE;
     }
     if (pipe->state == ERROR)

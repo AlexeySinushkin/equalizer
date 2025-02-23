@@ -57,30 +57,31 @@ void free_resources(){
     }
 }
 void uloop_fd_mod(struct uloop_fd *ufd, unsigned int flags)
-{
-    /*
-    if (!ufd->registered)
-        return;
-
-    uloop_fd_delete(ufd);
+{    
+    if (ufd->registered) {
+        uloop_fd_delete(ufd);
+    }    
     uloop_fd_add(ufd, flags);    
-    */
-   ufd->flags = flags;
+    //printf("...done\n");
 }
 
 void disable_read_event(struct uloop_fd *ufd){
+    //printf("disable_read_event %d\n", ufd->fd);
     uloop_fd_mod(ufd, ufd->flags & ~ULOOP_READ);
 }
 
 void enable_read_event(struct uloop_fd *ufd){
+    //printf("enable_read_event %d\n", ufd->fd);
     uloop_fd_mod(ufd, ufd->flags | ULOOP_READ);
 }
 
 void disable_write_event(struct uloop_fd *ufd){
+    //printf("disable_write_event %d\n", ufd->fd);
     uloop_fd_mod(ufd, ufd->flags & ~ULOOP_WRITE);
 }
 
 void enable_write_event(struct uloop_fd *ufd){
+    //printf("enable_write_event %d\n", ufd->fd);
     uloop_fd_mod(ufd, ufd->flags | ULOOP_WRITE);
 }
 
@@ -113,7 +114,7 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
         int result = pipe->read(pipe);
         if (result == EXIT_FAILURE)
         {
-            perror("read_from_server");
+            perror("read from pipe error");
             free_resources();
             return;
         }
@@ -134,7 +135,7 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
             return;
         }
     }
-    else if (events & ULOOP_WRITE)
+    if (events & ULOOP_WRITE)
     {
         if (pipe->state==WRITING){
             result = pipe->write(pipe);
@@ -152,8 +153,9 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
             free_resources();
             return;
         }
-    }else{
-        perror("unknown event \n");
+    }
+    if (!(events & ULOOP_EVENT_MASK)){
+        perror("unknown event\n");
         free_resources();
         return;
     }
@@ -213,11 +215,15 @@ int connect_to_server(){
     }
     printf("Connected to server, waiting for data...\n");
     client_pipe = calloc(1, sizeof(struct Pipe));
+    client_pipe->state = IDLE;
+    client_pipe->offset = 0;
     client_pipe->src_fd = client_ufd->fd;
     client_pipe->dst_fd = server_ufd->fd;
     client_pipe->read = read_from_client;
     client_pipe->write = write_to_server;
     server_pipe = calloc(1, sizeof(struct Pipe));
+    server_pipe->state = IDLE;
+    server_pipe->offset = 0;
     server_pipe->src_fd = server_ufd->fd;
     server_pipe->dst_fd = client_ufd->fd;
     server_pipe->read = read_from_server;
