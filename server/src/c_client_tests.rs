@@ -242,9 +242,8 @@ mod tests {
     }
 
     fn get_amount_to_send_size(rng: &mut ThreadRng) -> u16 {
-        let mut rnd: u16 = rng.random();
-        rnd = (rnd + 10) & 0x7FF;
-        rnd
+        let size = rng.random_range(10..=10200);
+        size as u16
     }
 
     fn get_sleep_ms(rng: &mut ThreadRng) -> u16 {
