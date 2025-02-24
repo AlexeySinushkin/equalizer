@@ -27,10 +27,14 @@ void header_to_buf(struct Header *header, u8* header_buf)
 
 int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
 
-    while (pipe->offset < pipe->size)
+    while (pipe->offset < pipe->size)    
     {
+        int size_to_send = pipe->size - pipe->offset;
         //тело идет сразу за заголовком и выровнено по 4 байта - отправляем одним буфером
-        int sent = send(pipe->dst_fd, pipe->header_buf + pipe->offset, pipe->size - pipe->offset, 0);//MSG_NOSIGNAL);
+        int sent = send(pipe->dst_fd, pipe->header_buf + pipe->offset, size_to_send, 0);//MSG_NOSIGNAL);
+        if (sent==0 && errno == EINPROGRESS){
+            return EXIT_SUCCESS;
+        }
         if (sent == -1) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 //printf("Socket is not ready for writing, try again later.\n");
@@ -41,7 +45,7 @@ int write_packet(struct Pipe* pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
                 return EXIT_FAILURE;  // Real error
             }
         }
-        //printf("--> Forwarded to server %d\n", sent);
+        printf("--> Forwarded to server %d\n", sent);
         pipe->offset += sent;
     }
     if (pipe->offset == pipe->size)
@@ -81,6 +85,9 @@ int read_from_client(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
         int from_client_bytes_read = read(pipe->src_fd, pipe->body_buf, MAX_BODY_SIZE);
 
         if (from_client_bytes_read==0){
+            if (errno == EINPROGRESS){
+                return EXIT_SUCCESS;
+            }
             fprintf(stderr, "Nothing was read %d %d\n", from_client_bytes_read, errno);
             pipe->state = ERROR;
             return EXIT_FAILURE;
@@ -95,7 +102,7 @@ int read_from_client(struct Pipe *pipe){ //-> EXIT_FAILURE | EXIT_SUCCESS
                 return EXIT_FAILURE;  // Real error
             }
         }   
-        //printf("--> Received from client %d\n", from_client_bytes_read);
+        printf("--> Received from client %d\n", from_client_bytes_read);
         struct Header header = create_data_header(from_client_bytes_read);
         header_to_buf(&header, pipe->header_buf);
         pipe->offset = 0;

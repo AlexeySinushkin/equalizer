@@ -78,20 +78,26 @@ void free_resources(){
 }
 void uloop_fd_mod(struct uloop_fd *ufd, unsigned int flags)
 {    
+    if (ufd->flags == flags){
+        printf("no change\n");
+        return;
+    }
     if (ufd->registered) {
         uloop_fd_delete(ufd);
-    }    
-    uloop_fd_add(ufd, flags);    
-    printf("...done\n");
+    }
+    if (flags!=0){
+        uloop_fd_add(ufd, flags);   
+        printf("...done\n");       
+    }
 }
 
 struct uloop_fd* get_read_ufd(struct Pipe *pipe) {
     if (pipe == client_pipe){
-        printf("<<-- ");
+        printf("--> ");
        return client_ufd;
     }
     else if (pipe == server_pipe){
-        printf("-->> ");
+        printf("<-- ");
         return server_ufd;
     }
     else{
@@ -114,11 +120,11 @@ void enable_read_event(struct Pipe *pipe){
 
 struct uloop_fd* get_write_ufd(struct Pipe *pipe) {
     if (pipe == client_pipe){
-        printf("<<-- ");
+        printf("--> ");
         return server_ufd;
     }
     else if (pipe == server_pipe){
-        printf("-->> ");
+        printf("<-- ");
         return client_ufd;
     }
     else{
@@ -183,14 +189,6 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
             free_resources();
             return;
         }
-        if (pipe->write_pending){
-            result = pipe->write(pipe);
-            //если записали только часть данных 
-            if (pipe->state==WRITING){
-                enable_write_event(pipe);
-                disable_read_event(pipe);
-            }
-        }
         if (result == EXIT_FAILURE || pipe->state==ERROR)
         {
             perror("error in read data available event\n");
@@ -211,8 +209,6 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
                 enable_read_event(pipe);
                 disable_write_event(pipe);
             }
-        }else if (pipe->state==IDLE){
-            disable_write_event(pipe);
         }
         if (result == EXIT_FAILURE)
         {
@@ -221,6 +217,17 @@ void receive_data_handler(struct uloop_fd *ufd, unsigned int events)
             return;
         }
     }
+    if (pipe->state==IDLE){
+        if (pipe->write_pending){
+            result = pipe->write(pipe);
+            //если записали только часть данных 
+            if (pipe->state==WRITING){
+                enable_write_event(pipe);
+                disable_read_event(pipe);
+            }
+        }
+    }
+
     if (!(events & ULOOP_EVENT_MASK)){
         perror("unknown event\n");
         free_resources();
