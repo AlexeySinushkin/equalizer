@@ -25,7 +25,7 @@ struct uloop_fd *server_ufd;
 struct Pipe *server_pipe;
 
 // Function to set a socket to non-blocking mode
-void set_nonblocking(int sock) {
+int set_nonblocking(int sock) {
     int flags = fcntl(sock, F_GETFL, 0);
     if (flags == -1) {
         perror("fcntl F_GETFL");
@@ -35,6 +35,26 @@ void set_nonblocking(int sock) {
         perror("fcntl F_SETFL O_NONBLOCK");
         exit(1);
     }
+    char* out_buf_size = getenv("OUT_BUF_SIZE");
+    if (out_buf_size != NULL){
+        int sndbuf_size = atoi(out_buf_size);
+        int actual_size;
+        socklen_t optlen = sizeof(actual_size);
+            // Set the TCP send buffer size
+        if (setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf_size, sizeof(sndbuf_size)) < 0) {
+            perror("setsockopt(SO_SNDBUF)");
+            return EXIT_FAILURE;
+        }
+            // Verify the actual buffer size
+        if (getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &actual_size, &optlen) < 0) {
+            perror("getsockopt(SO_SNDBUF)");
+            close(sock);
+            return EXIT_FAILURE;
+        }
+        printf("Requested buffer size: %d bytes\n", sndbuf_size);
+        printf("Actual buffer size: %d bytes\n", actual_size);
+    }
+    return EXIT_SUCCESS;
 }
 
 void free_resources(){
@@ -218,8 +238,9 @@ int connect_to_server(){
         return EXIT_FAILURE;
     }
 
-    set_nonblocking(sock_fd);  // Set socket to non-blocking mode
-
+    if (set_nonblocking(sock_fd) == EXIT_FAILURE){  // Set socket to non-blocking mode
+        return EXIT_FAILURE;
+    }
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(VPN_SERVER_PORT);
