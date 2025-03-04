@@ -17,7 +17,8 @@ pub fn start_listen(
     ct_pair: Sender<Pair>,
     stop_application_request: Receiver<bool>,
 ) -> thread::Result<JoinHandle<()>> {
-    let join = thread::spawn(move || {
+    let join = thread::Builder::new()
+        .name("server_listen".to_string()).spawn(move || {
         let client_listener = TcpListener::bind(format!("0.0.0.0:{}", client_accept_port))
             .expect("bind to client port");
         client_listener
@@ -42,7 +43,7 @@ pub fn start_listen(
             }
             sleep(sleep_ms);
         }
-    });
+    }).expect("server_listen thread started");
     Ok(join)
 }
 

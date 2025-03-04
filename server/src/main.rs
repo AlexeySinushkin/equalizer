@@ -44,7 +44,8 @@ To run as service /absolute_path/equalizer 12010 1194 --service
     let (ct_pair, cr_pair) = channel();
     let (_ct_stop, cr_stop) = channel();
     let join = start_listen(proxy_listen_port, vpn_listen_port, ct_pair, cr_stop).unwrap();
-    thread::spawn(move || {
+    thread::Builder::new()
+        .name("orchestrator".to_string()).spawn(move || {
         let pause = Duration::from_millis(50);
         let mut orchestrator =
             Orchestrator::new_stat(cr_pair, Box::new(SimpleStatisticCollector::default()));
@@ -60,7 +61,7 @@ To run as service /absolute_path/equalizer 12010 1194 --service
                 }
             }
         }
-    });
+    }).expect("orchestrator thread started");
     join.join().unwrap();
 }
 
