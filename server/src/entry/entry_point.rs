@@ -1,5 +1,5 @@
 use splitter::server_side_split::{split_server_stream, ClientDataStream, FillerDataStream};
-use crate::objects::{Pair};
+use crate::objects::{Pair, ONE_PACKET_MAX_SIZE};
 use log::{error, info};
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -64,18 +64,33 @@ fn handle_client(client_stream: TcpStream, vpn_server_port: u16) -> io::Result<P
 
 impl Pair {
     pub fn new(up_stream: TcpStream, client_stream: TcpStream) -> Pair {
-        let split = split_server_stream(client_stream);
+        let mut split = split_server_stream(client_stream);
+        let filler_stream = &mut split.filler_stream;
+        //ожидаем пол секунды (нужно узнать имя клиента)
+        sleep(Duration::from_millis(500));
+        let key = Pair::get_key(filler_stream);
         Pair {
             up_stream: Box::new(VpnDataStream::new(up_stream)),
             client_stream: split.data_stream,
             filler_stream: split.filler_stream,
-            key: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                .to_string()
-                .into(),
+            key,
         }
+    }
+
+    fn get_key(filler_stream: &mut Box<dyn DataStream>) -> String {
+        let mut buf: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
+        if let Ok(size) = filler_stream.read(&mut buf){
+            if size > 1 && buf[0] == 0x01 {//TODO 0x01 - пакет авторизации добавить в какой-нибудь модуль обработку
+                let key = String::from_utf8_lossy(&buf[1..size]);
+                return key.to_string();
+            }
+        }
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            .to_string()
+            .into()
     }
 }
 

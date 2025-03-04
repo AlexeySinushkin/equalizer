@@ -82,8 +82,8 @@ impl VpnProxy {
 
 impl ThreadWorkingSet {
     pub fn thread_start(mut instance: ThreadWorkingSet) -> JoinHandle<()> {
-        return thread::Builder::new()
-            .name("client_stream".to_string())
+        thread::Builder::new()
+            .name(instance.key.clone())
             .spawn(move || {
                 //цикл который использует заполнитель
                 let mut filler = Filler::new(INITIAL_SPEED);
@@ -104,7 +104,7 @@ impl ThreadWorkingSet {
                 }
                 info!("Exit from thread {}", instance.key)
             })
-            .expect("client_stream");
+            .expect("client_stream thread started")
     }
 
     fn main_loop(

@@ -27,6 +27,7 @@ mod tests {
     use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::ops::Deref;
     use std::process::{Child, Command};
     use std::rc::Rc;
     use std::sync::mpsc;
@@ -38,7 +39,7 @@ mod tests {
     use rand::Rng;
     use rand::rngs::ThreadRng;
 
-    use splitter::client_side_split::{split_client_stream, squash};
+    use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller};
     use splitter::DataStream;
     use splitter::server_side_vpn_stream::VpnDataStream;
     use crate::orchestrator::Orchestrator;

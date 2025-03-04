@@ -2,6 +2,7 @@ use crate::packet::*;
 use crate::{DataStream, READ_START_AWAIT_TIMEOUT};
 use std::net::{Shutdown, TcpStream};
 use easy_error::{bail, Error, ResultExt};
+use log::warn;
 
 pub struct ServerSideSplit {
     pub data_stream: Box<dyn DataStream>,
@@ -47,12 +48,11 @@ impl DataStream for ClientDataStream {
     }
 
     fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
-        //self.from_client.write_all(&self.temp_buf[.. packet_size])?;
         if let Some(packet_info) = read_packet(dst, &mut self.client_stream)? {
             if packet_info.packet_type == TYPE_DATA {
                 return Ok(packet_info.packet_size);
             } else if packet_info.packet_type == TYPE_FILLER {
-                bail!("Входящий корректный пакет заполнителя, обработка которого еще не реализована")
+                warn!("Входящий корректный пакет заполнителя, обработка которого еще не реализована");
             } else {
                 bail!("Мусор в данных")
             }
@@ -76,8 +76,17 @@ impl DataStream for FillerDataStream {
         write_packet(buf, TYPE_FILLER, &mut self.client_stream)
     }
 
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Error> {
-        bail!("Не должно быть данных заполнения от клиента");
+    fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {
+        if let Some(packet_info) = read_packet(dst, &mut self.client_stream)? {
+            if packet_info.packet_type == TYPE_FILLER {
+                return Ok(packet_info.packet_size);
+            }else if packet_info.packet_type == TYPE_DATA {
+                warn!("Входящий корректный пакет данных в методе чтения заполнителя");
+            } else {
+                bail!("Мусор в данных")
+            }
+        }
+        Ok(0)
     }
 
     fn shutdown(&mut self) {

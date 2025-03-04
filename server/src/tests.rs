@@ -31,6 +31,7 @@ mod tests {
     use std::fs::File;
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::ops::Deref;
     use std::rc::Rc;
     use std::sync::mpsc;
     use std::sync::mpsc::{channel, Sender};
@@ -83,6 +84,7 @@ mod tests {
         let vpn_stream = VpnDataStream::new(vpn_stream);
         let split = split_client_stream(client_stream);
 
+        send_client_name_packet(split.filler_stream.clone());
         trace!("Ждем подключения Заполнителя");
         orchestrator.invoke();
         TestStreams {vpn_stream: Box::new(vpn_stream),
@@ -91,6 +93,17 @@ mod tests {
             orchestrator,
             join_handle: (ct_stop, join) }
     }
+
+    fn send_client_name_packet(filler_stream: Rc<dyn DataStreamFiller>) {
+        let mut buf: [u8; 16] = [0; 16];
+        buf[0] = 0x01;
+        let client_name: &str = "test_client";
+        let client_name = client_name.as_bytes();
+        buf[1..client_name.len()+1].copy_from_slice(client_name);
+        info!("Отправляем имя клиента");
+        filler_stream.deref().write_all(&buf[..client_name.len()+1]).unwrap();
+    }
+
 
     /**
     Создаем мок VPN сервер:11194 и мок клиент.
@@ -314,7 +327,7 @@ mod tests {
             join_handle
         } = create_test_streams(1, None);
 
-        sleep(Duration::from_millis(5));
+        sleep(Duration::from_millis(505));
         if let Ok(vpn_read) = client_data_stream.read(&mut buf) {
             info!("Полученных полезных байт должно быть 10 => {}", vpn_read);
         }
@@ -432,7 +445,7 @@ mod tests {
         let TestStreams {
             mut vpn_stream,
             mut client_data_stream,
-            client_filler_stream,
+            mut client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
