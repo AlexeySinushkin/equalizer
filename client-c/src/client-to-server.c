@@ -8,7 +8,13 @@
 #include <sys/socket.h>
 
 
-
+struct Header create_filler_header(int packet_size)
+{
+    struct Header header;
+    header.packet_type = TYPE_FILLER;
+    header.packet_size = packet_size;
+    return header;
+}
 struct Header create_data_header(int packet_size)
 {
     struct Header header;

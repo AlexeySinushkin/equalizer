@@ -251,6 +251,30 @@ int connect_to_server(){
         return EXIT_FAILURE;
     }
 
+    char *client_name = getenv("CLIENT_NAME");
+    if (client_name != NULL){
+        int len = strlen(client_name);
+        if (len > 1 && len < 11){
+            int body_size = len + 1;
+            u8 buf[16] = {0};
+            struct Header header = create_filler_header(body_size);
+            header_to_buf(&header, buf);
+            buf[HEADER_SIZE] = 0x01;
+            u8* dst_offset = &buf[HEADER_SIZE + 1];
+            for (int i=0; i<len; i++){
+                printf("%02X ", (u8)client_name[i]);
+                dst_offset[i] = (u8)client_name[i];
+            }
+            printf("\n");
+            int sent = send(sock_fd, &buf[0], body_size+HEADER_SIZE, 0);
+            if (sent!=body_size+HEADER_SIZE){
+                printf("unable to send client name packet at once: %d\n", sent);
+                close(sock_fd);
+                return EXIT_FAILURE;
+            }
+        }
+    }
+
     // Register socket with uloop
     server_ufd = calloc(1, sizeof(struct uloop_fd));
     server_ufd->fd = sock_fd;
