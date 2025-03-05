@@ -82,8 +82,9 @@ impl Pair {
         let mut buf: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
         if let Ok(size) = filler_stream.read(&mut buf){
             if size > 1 && buf[0] == 0x01 {//TODO 0x01 - пакет авторизации добавить в какой-нибудь модуль обработку
-                let key = String::from_utf8_lossy(&buf[1..size]);
-                return key.to_string();
+                if let Ok(key) = str::from_utf8(&buf[1..size]){
+                    return key.to_string();
+                }
             }
         }
         SystemTime::now()
