@@ -1,12 +1,3 @@
-use std::net::{TcpListener, TcpStream};
-use std::thread::{sleep, JoinHandle};
-use log::trace;
-use splitter::client_side_split::split_client_stream;
-use splitter::DataStream;
-use splitter::server_side_vpn_stream::VpnDataStream;
-use crate::entry::entry_point::start_listen;
-use crate::orchestrator::Orchestrator;
-use crate::statistic::{NoStatistic, StatisticCollector};
 
 /**
 Интеграционные тесты со всеми участниками
@@ -23,28 +14,28 @@ ssh -L 12004:127.0.0.1:12005 -R 12010:127.0.0.1:12011 o2 ~/equalizer-client
 */
 #[cfg(test)]
 mod tests {
-    use std::env::var;
-    use std::fs::File;
+    
+    
     use std::io::{Read, Write};
-    use std::net::{Shutdown, TcpListener, TcpStream};
-    use std::ops::Deref;
-    use std::process::{Child, Command};
-    use std::rc::Rc;
-    use std::sync::mpsc;
+    use std::net::{TcpListener, TcpStream};
+    
+    
+    
+    
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
     use std::thread::{sleep, JoinHandle};
-    use std::time::{Duration, Instant};
-    use log::{error, info, trace, warn};
+    use std::time::Duration;
+    use log::{error, info, trace};
     use rand::Rng;
     use rand::rngs::ThreadRng;
 
-    use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller};
+    use splitter::client_side_split::DataStreamFiller;
     use splitter::DataStream;
-    use splitter::server_side_vpn_stream::VpnDataStream;
+    
     use crate::orchestrator::Orchestrator;
-    use crate::speed::INITIAL_SPEED;
-    use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
+    
+    use crate::statistic::NoStatistic;
     use crate::tests::test_init::initialize_logger;
     use crate::entry::entry_point::*;
 
@@ -157,11 +148,11 @@ mod tests {
 
     fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
+
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
             //отправляем в поток данные из out_buf
@@ -175,7 +166,6 @@ mod tests {
                 write_left_size -= to_send_size;
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -196,11 +186,11 @@ mod tests {
     fn server_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream{
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
+
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
             //отправляем в поток данные из out_buf
@@ -214,7 +204,6 @@ mod tests {
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -258,7 +247,7 @@ mod tests {
 
     fn get_random_buf() -> [u8; TEST_BUF_SIZE] {
         let mut buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..TEST_BUF_SIZE {
             buf[i] = rng.random()
         }

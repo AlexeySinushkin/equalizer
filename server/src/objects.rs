@@ -1,4 +1,3 @@
-use std::io;
 use std::time::Instant;
 use splitter::{DataStream, MAX_BODY_SIZE};
 

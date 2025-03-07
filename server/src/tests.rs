@@ -1,12 +1,3 @@
-use std::net::{TcpListener, TcpStream};
-use std::thread::{sleep, JoinHandle};
-use log::trace;
-use splitter::client_side_split::split_client_stream;
-use splitter::DataStream;
-use splitter::server_side_vpn_stream::VpnDataStream;
-use crate::entry::entry_point::start_listen;
-use crate::orchestrator::Orchestrator;
-use crate::statistic::{NoStatistic, StatisticCollector};
 
 #[cfg(test)]
 pub mod test_init {
@@ -27,10 +18,10 @@ pub mod test_init {
 
 #[cfg(test)]
 mod tests {
-    use std::env::var;
+    
     use std::fs::File;
     use std::io::{Read, Write};
-    use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::net::{TcpListener, TcpStream};
     use std::ops::Deref;
     use std::rc::Rc;
     use std::sync::mpsc;
@@ -38,11 +29,11 @@ mod tests {
     use std::thread;
     use std::thread::{sleep, JoinHandle};
     use std::time::{Duration, Instant};
-    use log::{error, info, trace, warn};
+    use log::{error, info, trace};
     use rand::Rng;
     use rand::rngs::ThreadRng;
     use serial_test::serial;
-    use splitter::client_side_split::{split_client_stream, squash, ClientSideSplit, DataStreamFiller, DataStreamVpn};
+    use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller, DataStreamVpn};
     use splitter::DataStream;
     use splitter::server_side_vpn_stream::VpnDataStream;
     use crate::orchestrator::Orchestrator;
@@ -165,19 +156,18 @@ mod tests {
         assert!(compare_result2);
     }
 
-    fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
+    fn client_side_write_and_read(stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
         let mut out_file = File::create("target/client-out.bin").unwrap();
         let mut in_file = File::create("target/client-in.bin").unwrap();
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut split= split_client_stream(stream);
-        let mut stream = split.data_stream.clone();
-        let mut filler = split.filler_stream.clone();
-        let mut rng = rand::thread_rng();
+        let split= split_client_stream(stream);
+        let stream = split.data_stream.clone();
+        let filler = split.filler_stream.clone();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
         let mut filler_buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
@@ -200,7 +190,6 @@ mod tests {
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
                 //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -226,11 +215,10 @@ mod tests {
         let mut in_file = File::create("target/server-in.bin").unwrap();
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
             //отправляем в поток данные из out_buf
@@ -247,7 +235,6 @@ mod tests {
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
                 //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -321,8 +308,8 @@ mod tests {
 
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
-            mut client_filler_stream,
+            client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(1, None);
@@ -402,11 +389,11 @@ mod tests {
         initialize_logger();
 
         const BUF_SIZE: usize = 10_000;
-        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+        let buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
+            client_data_stream,
             client_filler_stream,
             mut orchestrator,
             join_handle
@@ -444,8 +431,8 @@ mod tests {
     fn stat_goes_to_main() {
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
-            mut client_filler_stream,
+            client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));

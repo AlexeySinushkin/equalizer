@@ -17,7 +17,7 @@ pub const TYPE_FILLER: u8 = 0x56;
 pub const TYPE_BYTE_INDEX: usize = 1;
 pub const LENGTH_BYTE_LSB_INDEX: usize = 2;
 pub const LENGTH_BYTE_MSB_INDEX: usize = 3;
-pub const DATA_BYTE_INDEX: usize = HEADER_SIZE;
+//pub const DATA_BYTE_INDEX: usize = HEADER_SIZE;
 
 pub type Buffer = [u8; MAX_BODY_SIZE];
 
