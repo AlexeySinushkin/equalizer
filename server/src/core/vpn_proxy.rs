@@ -1,13 +1,11 @@
-use std::collections::VecDeque;
+use std::io::{Read, Write};
 use crate::core::filler::Filler;
 use crate::core::throttler::ThrottlerAnalyzer;
 use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::INITIAL_SPEED;
-use log::{error, info, trace};
-use std::fs::File;
-use std::io::{Read, Write};
+use log::{error, info};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -133,9 +131,7 @@ impl ThreadWorkingSet {
                 filler.data_was_sent(vpn_incoming_data_size);
             } else if let Some(packet) = filler.get_fill_bytes() {
                 //trace!("=>> filler {}", packet.size);
-                //FIXME: временный хак
-                let size = packet.size/4;
-                self.pair.filler_stream.write_all(&packet.buf[..size])?;
+                self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
                 filler.filler_was_sent(size);
             } else {
                 sleep(BURNOUT_DELAY);

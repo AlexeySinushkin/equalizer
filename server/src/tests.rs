@@ -1,12 +1,3 @@
-use std::net::{TcpListener, TcpStream};
-use std::thread::{sleep, JoinHandle};
-use log::trace;
-use splitter::client_side_split::split_client_stream;
-use splitter::DataStream;
-use splitter::server_side_vpn_stream::VpnDataStream;
-use crate::entry::entry_point::start_listen;
-use crate::orchestrator::Orchestrator;
-use crate::statistic::{NoStatistic, StatisticCollector};
 
 #[cfg(test)]
 pub mod test_init {
@@ -27,10 +18,10 @@ pub mod test_init {
 
 #[cfg(test)]
 mod tests {
-    use std::env::var;
+    
     use std::fs::File;
     use std::io::{Read, Write};
-    use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::net::{TcpListener, TcpStream};
     use std::ops::Deref;
     use std::rc::Rc;
     use std::sync::mpsc;
@@ -38,11 +29,11 @@ mod tests {
     use std::thread;
     use std::thread::{sleep, JoinHandle};
     use std::time::{Duration, Instant};
-    use log::{error, info, trace, warn};
+    use log::{error, info, trace};
     use rand::Rng;
     use rand::rngs::ThreadRng;
     use serial_test::serial;
-    use splitter::client_side_split::{split_client_stream, squash, ClientSideSplit, DataStreamFiller, DataStreamVpn};
+    use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller, DataStreamVpn};
     use splitter::DataStream;
     use splitter::server_side_vpn_stream::VpnDataStream;
     use crate::orchestrator::Orchestrator;
@@ -165,19 +156,18 @@ mod tests {
         assert!(compare_result2);
     }
 
-    fn client_side_write_and_read(mut stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
+    fn client_side_write_and_read(stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
         let mut out_file = File::create("target/client-out.bin").unwrap();
         let mut in_file = File::create("target/client-in.bin").unwrap();
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut split= split_client_stream(stream);
-        let mut stream = split.data_stream.clone();
-        let mut filler = split.filler_stream.clone();
-        let mut rng = rand::thread_rng();
+        let split= split_client_stream(stream);
+        let stream = split.data_stream.clone();
+        let filler = split.filler_stream.clone();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
         let mut filler_buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
@@ -193,14 +183,13 @@ mod tests {
                 }
                 //trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
-                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+                let _ = out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
                 //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -226,11 +215,10 @@ mod tests {
         let mut in_file = File::create("target/server-in.bin").unwrap();
 
         stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut write_left_size = TEST_BUF_SIZE; //сколько байт осталось записать из буфера
         let mut write_offset = 0; //смещение указателя
         let mut read_size = 0;
-        let mut iteration = 0;
 
         while write_left_size > 0 || read_size < TEST_BUF_SIZE {
             //отправляем в поток данные из out_buf
@@ -241,13 +229,12 @@ mod tests {
                 }
                 //trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
-                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+                let _ = out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
                 //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
-                iteration += 1;
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -295,7 +282,7 @@ mod tests {
 
     fn get_random_buf() -> [u8; TEST_BUF_SIZE] {
         let mut buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..TEST_BUF_SIZE {
             buf[i] = rng.random()
         }
@@ -321,8 +308,8 @@ mod tests {
 
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
-            mut client_filler_stream,
+            client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(1, None);
@@ -385,7 +372,8 @@ mod tests {
         }
         info!("Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         let mut vpn_stream = join_handle_2.join().unwrap();
-        vpn_stream.write_all(&mut buf[..1]);
+        let _ = vpn_stream.write_all(&mut buf[..1]);
+        info!("data_offset - {data_offset}, filler_offset - {filler_offset}");
         assert!(data_offset >= 1_000_000);
         assert!(filler_offset > 35_000 && filler_offset < 120_000, "{}", filler_offset);
         join_handle.0.send(true).unwrap();
@@ -402,17 +390,17 @@ mod tests {
         initialize_logger();
 
         const BUF_SIZE: usize = 10_000;
-        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+        let buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
+            client_data_stream,
             client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(2, None);
 
-        client_data_stream.write_all(&buf[..10]).unwrap();
+        let _ = client_data_stream.write_all(&buf[..10]).unwrap();
         vpn_stream.write_all(&buf[..10]).unwrap();
 
         sleep(Duration::from_millis(10));
@@ -426,11 +414,14 @@ mod tests {
             let send_result = vpn_stream.write_all(&buf[..10]);
             if send_result.is_err() {
                 info!("broken after {}", i);
+                orchestrator.invoke();
                 break;
             }
         }
+        sleep(Duration::from_millis(1000));
         //проверяем что клиентов больше нет, а мы все еще не упали
-        assert_eq!(0, orchestrator.get_pairs_count());
+        let pairs_count = orchestrator.get_pairs_count();
+        assert_eq!(0, pairs_count);
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
         //TODO: дописать повторное подключение
@@ -444,8 +435,8 @@ mod tests {
     fn stat_goes_to_main() {
         let TestStreams {
             mut vpn_stream,
-            mut client_data_stream,
-            mut client_filler_stream,
+            client_data_stream,
+            client_filler_stream,
             mut orchestrator,
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));

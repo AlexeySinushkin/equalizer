@@ -1,13 +1,12 @@
-use splitter::server_side_split::{split_server_stream, ClientDataStream, FillerDataStream};
+use splitter::server_side_split::split_server_stream;
 use crate::objects::{Pair, ONE_PACKET_MAX_SIZE};
 use log::{error, info};
-use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
-use easy_error::{Error, ResultExt};
+use std::io::Read;
 use splitter::{DataStream};
 use splitter::server_side_vpn_stream::VpnDataStream;
 
@@ -82,7 +81,7 @@ impl Pair {
         let mut buf: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
         if let Ok(size) = filler_stream.read(&mut buf){
             if size > 1 && buf[0] == 0x01 {//TODO 0x01 - пакет авторизации добавить в какой-нибудь модуль обработку
-                if let Ok(key) = str::from_utf8(&buf[1..size]){
+                if let Ok(key) = std::str::from_utf8(&buf[1..size]){
                     return key.to_string();
                 }
             }
