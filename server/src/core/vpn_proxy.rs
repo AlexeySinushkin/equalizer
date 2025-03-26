@@ -71,7 +71,6 @@ impl VpnProxy {
 
         let join_handle = ThreadWorkingSet::thread_start(thread_working_set);
 
-
         Self {
             ct_command,
             cr_state,

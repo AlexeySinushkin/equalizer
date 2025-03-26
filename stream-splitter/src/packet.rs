@@ -60,7 +60,7 @@ pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> Resu
         .context("Write header in write_packet")?;
     write(buf, stream)
         .context("Write data in write_packet")?;
-    stream.flush().context("Flush stream in write_packet")
+    Ok(())
 }
 
 pub fn read_packet(
