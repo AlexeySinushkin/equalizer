@@ -146,7 +146,7 @@ impl ThreadWorkingSet {
             }else if let Some(packet) = filler.get_filler_packet(){
                 //trace!("=>> filler {}", packet.size);
                 self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
-                filler.filler_was_sent(size);
+                filler.filler_was_sent(packet.size);
                 some_work = true;
             }
         }
