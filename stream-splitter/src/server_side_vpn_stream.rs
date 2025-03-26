@@ -23,8 +23,7 @@ impl DataStream for VpnDataStream {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         packet::write(buf, &mut self.vpn_data_stream)
             .context("Failed to write to vpn stream")?;
-        self.vpn_data_stream.flush()
-            .context("Failed to flush vpn stream")
+        Ok(())
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {

@@ -12,6 +12,7 @@ use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorComman
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
+use log::debug;
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -61,19 +62,21 @@ impl SpeedCorrector {
             let last_correction_date = Self::last_sent_command_date(info);
             if last_correction_date.is_none_or(|time| time.add(MODIFY_PERIOD) < Instant::now()) {
                 if long_term_speed.data_percent < DOWN_TRIGGER {
+                    debug!("decrease due percent {}", long_term_speed.data_percent);
                     return Some(Self::decrease_command(&long_term_speed, info));
                 }
                 if long_term_speed.data_percent > UP_TRIGGER {
+                    debug!("increase due percent {}", long_term_speed.data_percent);
                     return Some(Self::increase_command(&long_term_speed, info));
                 }
             }
         }
         //быстрей реагируем на низкую скорость, если процент заполнения низок
-        if let Some(short_term_speed) = get_speed(SHORT_TERM, &info.sent_data) {
+        /*if let Some(short_term_speed) = get_speed(SHORT_TERM, &info.sent_data) {
             if short_term_speed.speed < SHUTDOWN_SPEED && short_term_speed.data_percent > LOW_SPEED_PROPORTION {
                 return Self::switch_off_command(info);
             }
-        }
+        }*/
         None
     }
 

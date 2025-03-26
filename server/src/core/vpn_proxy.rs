@@ -209,7 +209,7 @@ impl ThreadWorkingSet {
                     if let SpeedCorrectorCommand::SetSpeed(speed) = speed_command {
                         debug!("speed was set {speed}");
                         filler.set_speed(speed);
-                        self.free_mode = false;
+                        //self.free_mode = false;
                     }
                 }
             }
