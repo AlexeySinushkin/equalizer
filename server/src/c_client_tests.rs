@@ -29,12 +29,7 @@ mod tests {
     use log::{error, info, trace};
     use rand::Rng;
     use rand::rngs::ThreadRng;
-
-    use splitter::client_side_split::DataStreamFiller;
-    use splitter::DataStream;
-    
     use crate::orchestrator::Orchestrator;
-    
     use crate::statistic::NoStatistic;
     use crate::tests::test_init::initialize_logger;
     use crate::entry::entry_point::*;
@@ -42,9 +37,9 @@ mod tests {
 
     const TEST_BUF_SIZE: usize = 100 * 1024;
     const CLIENT_PROXY_LISTEN_PORT_WSL: u16 = 12004;
-    const CLIENT_PROXY_LISTEN_PORT: u16 = 12005;
+    //const CLIENT_PROXY_LISTEN_PORT: u16 = 12005;
     const PROXY_LISTEN_PORT_WSL: u16 = 12011;
-    const PROXY_LISTEN_PORT: u16 = 12010;
+    //const PROXY_LISTEN_PORT: u16 = 12010;
     const VPN_LISTEN_PORT: u16 = 11294;
 
 
@@ -65,7 +60,7 @@ mod tests {
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
 
         let (ct_vpn, cr_vpn) = channel();
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, Box::new(NoStatistic::default()));
+        let mut orchestrator = Orchestrator::new(cr_vpn, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
         let join = start_listen(PROXY_LISTEN_PORT_WSL, VPN_LISTEN_PORT, ct_vpn, cr_stop).unwrap();

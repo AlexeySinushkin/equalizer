@@ -2,16 +2,14 @@
 Следит за количеством переданных данных VPN->client
 Если полезных данных недостаточно, дает данные (пока пустые пакеты)
 Поддерживается максимальный битрейт в течении 3-10 секунд, после чего
-идет медленное затухание (TODO)
+идет медленное затухание
 */
 use crate::objects::{HotPotatoInfo, Packet, SentPacket, MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
-use std::ops::Sub;
+use std::ops::{Sub};
 use std::time::{Duration, Instant};
 const ANALYZE_PERIOD_MS: u64 = 100;
-const PREDICT_MS: usize = 10;
+const MIN_BYTES_TO_FILL:usize = ONE_PACKET_MAX_SIZE/4;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
-const ALMOST_OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS - PREDICT_MS as u64);
-
 enum PacketType {
     Data,
     Filler,
@@ -50,7 +48,7 @@ impl SentPacketType {
     }
 
     //моложе - был создан позже этого времени
-    fn is_younger(&self, time: &Instant) -> bool {
+    fn _is_younger(&self, time: &Instant) -> bool {
         return &self.packet.sent_date > time;
     }
 }
@@ -62,6 +60,7 @@ pub struct Filler {
 }
 
 impl Filler {
+
     pub fn new(speed: usize) -> Filler {
         let queue: Vec<SentPacketType> = Vec::new();
         Self { queue, speed }
@@ -134,37 +133,40 @@ impl Filler {
         result
     }
 
+    pub fn get_available_space(&self) -> usize {
+        if let Some(last) = self.queue.last() {
+            return self.get_space(&last.packet);
+        }
+        ONE_PACKET_MAX_SIZE
+    }
     /*
-    Если данных набралось за период 90мс
-    Подсчитываем сколько надо доотправить для периода в 100мс
+        Подсчитываем сколько надо доотправить для поддержания скорости
+        S = v*t, S = количество байт
      */
-    pub fn get_fill_bytes(&mut self) -> Option<Packet> {
-        let almost_old_time = Instant::now().sub(ALMOST_OLD_AGE);
-        //подсчитываем сколько отправили за последние 90мс
-        if let Some(size_90) = self
-            .queue
-            .iter()
-            .rev()
-            .filter(|sp| sp.is_younger(&almost_old_time))
-            .map(|sp| sp.packet.sent_size)
-            .reduce(|acc_size: usize, size| acc_size + size)
-        {
-            //столько мы должны отправить за 100мс
-            let size_100 = self.speed * ANALYZE_PERIOD_MS as usize;
-            //если есть необходимость дополнять
-            if size_100 > size_90 {
-                //отдаем в 2 раза меньше, чтобы не забивать канал
-                let fill_size = (size_100 - size_90) / 2;
-                if fill_size > ONE_PACKET_MAX_SIZE {
+    pub fn get_filler_packet(&self) -> Option<Packet> {
+        if let Some(last) = self.queue.last() {
+            let last = last.packet;
+            let bytes_to_fill = self.get_space(&last);
+            if bytes_to_fill > MIN_BYTES_TO_FILL {
+                if bytes_to_fill > ONE_PACKET_MAX_SIZE {
                     return Some(Packet::new_packet(ONE_PACKET_MAX_SIZE));
                 }
-                if fill_size > 0 {
-                    return Some(Packet::new_packet(fill_size));
-                }
+                return Some(Packet::new_packet(bytes_to_fill));
             }
         }
         None
     }
+
+    fn get_space(&self, from_packet: &SentPacket) -> usize {
+        let duration_to_now = Instant::now().sub(from_packet.sent_date);
+        let duration_sent = Duration::from_millis((from_packet.sent_size / self.speed) as u64);
+        if duration_to_now > duration_sent {
+            let delta_ms = duration_to_now.sub(duration_sent).as_millis() as usize;
+            return self.speed * delta_ms;
+        }
+        0
+    }
+
 }
 
 #[cfg(test)]
@@ -172,17 +174,24 @@ mod tests {
 
     use std::thread::sleep;
     use std::time::Duration;
-
+    use log::{info};
     use crate::core::filler::{Filler, OLD_AGE};
-    use crate::speed::INITIAL_SPEED;
+    use crate::tests::test_init::initialize_logger;
+
+    pub const INITIAL_SPEED: usize = 1024 * 1024 / 1000;
 
     #[test]
     fn filler_test() {
+        initialize_logger();
         let mut filler = Filler::new(INITIAL_SPEED);
-        filler.data_was_sent(10);
-        sleep(Duration::from_millis(25));
-        let fill_packet = filler.get_fill_bytes();
-        assert!(fill_packet.is_some());
+        filler.data_was_sent(1);
+        sleep(Duration::from_millis(5));
+        let fill_packet = filler.get_filler_packet();
+        let from = 4 * INITIAL_SPEED;
+        let to = 6 * INITIAL_SPEED;
+        let size = fill_packet.unwrap().size;
+        info!("{from} < {size} < {to}");
+        assert!(size > from && size < to);
     }
 
     #[test]

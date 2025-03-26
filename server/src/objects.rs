@@ -1,5 +1,6 @@
 use std::time::Instant;
 use splitter::{DataStream, MAX_BODY_SIZE};
+use crate::speed::{SpeedCorrectorCommand};
 
 //размер одного tcp пакета (как правило не больше 1024 - 10_000 хватит для 100Мбит)
 pub const ONE_PACKET_MAX_SIZE: usize = MAX_BODY_SIZE;
@@ -46,7 +47,7 @@ pub struct Pair {
  */
 pub struct HotPotatoInfo {
     //такую скорость надо было поддерживать в момент отправки пакетов
-    pub target_speed: usize,
+    pub target_speed: Option<usize>,
     pub data_packets: [Option<SentPacket>; MAX_STAT_COUNT],
     pub data_count: usize,
     pub filler_packets: [Option<SentPacket>; MAX_STAT_COUNT],
@@ -56,7 +57,7 @@ pub struct HotPotatoInfo {
 impl Default for HotPotatoInfo {
     fn default() -> HotPotatoInfo {
         HotPotatoInfo {
-            target_speed: 0,
+            target_speed: None,
             data_count: 0,
             filler_count: 0,
             data_packets: [None; MAX_STAT_COUNT],
@@ -67,7 +68,7 @@ impl Default for HotPotatoInfo {
 
 //команды в сторону прокси (управление)
 pub enum RuntimeCommand {
-    SetSpeed(usize),
+    SetSpeed(SpeedCorrectorCommand),
 }
 
 //информация о состоянии прокси

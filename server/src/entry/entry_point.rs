@@ -6,7 +6,6 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io, thread};
-use std::io::Read;
 use splitter::{DataStream};
 use splitter::server_side_vpn_stream::VpnDataStream;
 

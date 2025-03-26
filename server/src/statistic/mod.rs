@@ -1,5 +1,5 @@
 use crate::objects::{HotPotatoInfo, SentPacket};
-use crate::speed::INITIAL_SPEED;
+use crate::speed::{SHUTDOWN_SPEED};
 use std::ops::Sub;
 use std::time::Duration;
 use std::time::Instant;
@@ -70,7 +70,7 @@ impl CurrentRollingInfo {
         let filler: Vec<SentPacket> = vec![];
         CurrentRollingInfo {
             key,
-            target_speed: INITIAL_SPEED,
+            target_speed: SHUTDOWN_SPEED,
             data,
             filler,
         }
@@ -160,7 +160,7 @@ impl StatisticCollector for SimpleStatisticCollector {
 #[cfg(test)]
 mod tests {
     use crate::objects::{HotPotatoInfo, SentPacket};
-    use crate::speed::INITIAL_SPEED;
+    pub const INITIAL_SPEED: usize = 1024 * 1024 / 1000;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
     use log::info;
     use std::ops::{Add, Sub};
@@ -180,7 +180,7 @@ mod tests {
         let increment = ANALYZE_PERIOD / 10;
         for _i in 0..20 {
             let mut collected_info = HotPotatoInfo::default();
-            collected_info.target_speed = INITIAL_SPEED;
+            collected_info.target_speed = Some(INITIAL_SPEED);
             collected_info.data_count = 1;
             collected_info.filler_count = 1;
             collected_info.data_packets[0] = Some(SentPacket {
@@ -218,7 +218,7 @@ mod tests {
         let old_time = Instant::now().sub(ANALYZE_PERIOD / 2);
 
         let mut collected_info = HotPotatoInfo::default();
-        collected_info.target_speed = INITIAL_SPEED;
+        collected_info.target_speed = Some(INITIAL_SPEED);
         collected_info.data_count = 1;
         collected_info.filler_count = 0;
         collected_info.data_packets[0] = Some(SentPacket {

@@ -9,7 +9,7 @@ use log::LevelFilter;
 use simplelog::{Config, SimpleLogger};
 
 use crate::orchestrator::Orchestrator;
-use crate::speed::native_to_regular;
+use crate::speed::{native_to_regular};
 use crate::statistic::{SimpleStatisticCollector, Summary};
 
 mod core;
@@ -48,7 +48,7 @@ To run as service /absolute_path/equalizer 12010 1194 --service
         .name("orchestrator".to_string()).spawn(move || {
         let pause = Duration::from_millis(50);
         let mut orchestrator =
-            Orchestrator::new_stat(cr_pair, Box::new(SimpleStatisticCollector::default()));
+            Orchestrator::new(cr_pair, Box::new(SimpleStatisticCollector::default()));
         loop {
             orchestrator.invoke();
             sleep(pause);

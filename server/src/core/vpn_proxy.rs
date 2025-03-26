@@ -1,11 +1,9 @@
-use std::io::{Read, Write};
 use crate::core::filler::Filler;
-use crate::core::throttler::ThrottlerAnalyzer;
 use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
-use crate::speed::INITIAL_SPEED;
-use log::{error, info};
+use crate::speed::{SpeedCorrectorCommand, SHUTDOWN_SPEED};
+use log::{debug, error, info};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -18,12 +16,13 @@ const BURNOUT_DELAY: Duration = Duration::from_micros(500);
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
     cr_state: Receiver<ProxyState>,
+    join_handle: JoinHandle<()>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
     //будем использовать IP tun интерфейса
     pub key: String,
 }
 pub trait Proxy {
-    fn get_key(&mut self) -> &String;
+    fn get_key(&self) -> &String;
     fn try_recv_state(&mut self) -> Result<ProxyState, TryRecvError>;
     fn try_send_command(
         &mut self,
@@ -31,7 +30,7 @@ pub trait Proxy {
     ) -> Result<(), SendError<RuntimeCommand>>;
 }
 impl Proxy for VpnProxy {
-    fn get_key(&mut self) -> &String {
+    fn get_key(&self) -> &String {
         &self.key
     }
     fn try_recv_state(&mut self) -> Result<ProxyState, TryRecvError> {
@@ -49,6 +48,8 @@ struct ThreadWorkingSet {
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
     pair: Pair,
+    //without throttler & filler
+    free_mode: bool,
     //временный буфер
     buf: [u8; ONE_PACKET_MAX_SIZE],
 }
@@ -63,20 +64,31 @@ impl VpnProxy {
             key: key.clone(),
             cr_command,
             ct_state: ct_state.clone(),
+            free_mode: true,
             pair,
             buf: [0; ONE_PACKET_MAX_SIZE],
         };
 
-        ThreadWorkingSet::thread_start(thread_working_set);
+        let join_handle = ThreadWorkingSet::thread_start(thread_working_set);
 
 
         Self {
             ct_command,
             cr_state,
+            join_handle,
             key: key.clone(),
         }
     }
 }
+impl Drop for VpnProxy {
+    fn drop(&mut self) {
+        info!("Dropping VpnProxy. Thread {}. Finished: {}. {:?}",
+            self.join_handle.thread().name().unwrap(),
+            self.join_handle.is_finished(),
+            self.join_handle.thread().id());
+    }
+}
+
 
 impl ThreadWorkingSet {
     pub fn thread_start(mut instance: ThreadWorkingSet) -> JoinHandle<()> {
@@ -84,12 +96,16 @@ impl ThreadWorkingSet {
             .name(instance.key.clone())
             .spawn(move || {
                 //цикл который использует заполнитель
-                let mut filler = Filler::new(INITIAL_SPEED);
-                let mut throttler = ThrottlerAnalyzer::new(INITIAL_SPEED);
+                let mut filler = Filler::new(SHUTDOWN_SPEED);
                 instance.ct_state.send(ProxyState::SetupComplete).unwrap();
                 info!("Client thread started");
                 loop {
-                    match instance.main_loop(&mut filler, &mut throttler) {
+                    let result = if instance.free_mode {
+                        instance.free_loop(&mut filler)
+                    } else {
+                        instance.main_loop(&mut filler)
+                    };
+                    match result {
                         Err(e) => {
                             error!("{} {}", e.ctx, e.location);
                             let _ = instance.ct_state.send(ProxyState::Broken);
@@ -108,54 +124,99 @@ impl ThreadWorkingSet {
     fn main_loop(
         &mut self,
         filler: &mut Filler,
-        throttler: &mut ThrottlerAnalyzer,
     ) -> Result<(), Error> {
+        let mut some_work = false;
         //GET запрос на чтение нового видоса
         let size= self.pair.client_stream.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
             //trace!("->> {}", size);
             self.pair.up_stream.write_all(&self.buf[..size])?;
+            some_work = true;
         }
         //если есть место
-        let mut available_space = throttler.get_available_space();
+        let available_space = filler.get_available_space();
         if available_space > A_FEW_SPACE {
-            if available_space > ONE_PACKET_MAX_SIZE {
-                available_space = ONE_PACKET_MAX_SIZE;
-            }
-            let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..available_space])?;
+            let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..])?;
             if vpn_incoming_data_size > 0  {
                 //trace!("=>> {}", vpn_incoming_data_size);
                 self.pair.client_stream.write_all(&self.buf[..vpn_incoming_data_size])?;
-                throttler.data_was_sent(vpn_incoming_data_size);
                 filler.data_was_sent(vpn_incoming_data_size);
-            } else if let Some(packet) = filler.get_fill_bytes() {
+                some_work = true;
+            }else if let Some(packet) = filler.get_filler_packet(){
                 //trace!("=>> filler {}", packet.size);
-                //FIXME: временный хак
-                let size = packet.size/4;
-                self.pair.filler_stream.write_all(&packet.buf[..size])?;
+                self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
                 filler.filler_was_sent(size);
-            } else {
-                sleep(BURNOUT_DELAY);
+                some_work = true;
             }
-        } else {
-            sleep(BURNOUT_DELAY);
         }
         if let Some(collected_info) = filler.clean_almost_full() {
             let start = Instant::now();
             self.ct_state.send(ProxyState::Info(collected_info))
                 .context("Send hot statistic info")?;
+            some_work = true;
             if start.elapsed() > Duration::from_millis(3){
                 bail!("Долгая отправка данных по статистике");
             }
         }
         if let Ok(command) = self.cr_command.try_recv() {
             match command {
-                RuntimeCommand::SetSpeed(speed) => {
-                    filler.set_speed(speed);
-                    throttler.set_speed(speed);
+                RuntimeCommand::SetSpeed(speed_command) => {
+                    if let SpeedCorrectorCommand::SetSpeed(speed) = speed_command {
+                        debug!("speed was updated {speed}");
+                        filler.set_speed(speed);
+                    }else if let SpeedCorrectorCommand::SwitchOff = speed_command {
+                        debug!("free mode enter");
+                        self.free_mode = true;
+                    }
                 }
             }
+        }
+        if !some_work {
+            sleep(BURNOUT_DELAY);
+        }
+        Ok(())
+    }
+
+    fn free_loop(
+        &mut self,
+        filler: &mut Filler,
+    ) -> Result<(), Error> {
+        let mut some_work = false;
+        let size= self.pair.client_stream.read(&mut self.buf[..])?;
+        if size > 0 {
+            self.pair.up_stream.write_all(&self.buf[..size])?;
+            some_work = true;
+        }
+        let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..])?;
+        if vpn_incoming_data_size > 0  {
+            self.pair.client_stream.write_all(&self.buf[..vpn_incoming_data_size])?;
+            filler.data_was_sent(vpn_incoming_data_size);
+            some_work = true;
+        }
+
+        if let Some(collected_info) = filler.clean_almost_full() {
+            let start = Instant::now();
+            self.ct_state.send(ProxyState::Info(collected_info))
+                .context("Send hot statistic info")?;
+            some_work = true;
+            if start.elapsed() > Duration::from_millis(3){
+                bail!("Долгая отправка данных по статистике");
+            }
+        }
+        if let Ok(command) = self.cr_command.try_recv() {
+            match command {
+                RuntimeCommand::SetSpeed(speed_command) => {
+                    if let SpeedCorrectorCommand::SetSpeed(speed) = speed_command {
+                        debug!("speed was set {speed}");
+                        filler.set_speed(speed);
+                        self.free_mode = false;
+                    }
+                }
+            }
+        }
+        if !some_work {
+            sleep(BURNOUT_DELAY);
         }
         Ok(())
     }

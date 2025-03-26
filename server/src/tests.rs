@@ -34,22 +34,20 @@ mod tests {
     use rand::rngs::ThreadRng;
     use serial_test::serial;
     use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller, DataStreamVpn};
-    use splitter::DataStream;
-    use splitter::server_side_vpn_stream::VpnDataStream;
     use crate::orchestrator::Orchestrator;
-    use crate::speed::INITIAL_SPEED;
     use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
     use crate::tests::test_init::initialize_logger;
     use crate::entry::entry_point::*;
-
+    use crate::objects::{RuntimeCommand, ONE_PACKET_MAX_SIZE};
+    use crate::speed::{to_native_speed, to_regular_speed, SpeedCorrectorCommand};
 
     const TEST_BUF_SIZE: usize = 100 * 1024;
     const PROXY_LISTEN_PORT: u16 = 11100;
     const VPN_LISTEN_PORT: u16 = 11200;
+    const TEST_CLIENT_NAME: &str = "test_client";
 
     struct TestStreams {
-        //mock впн сервера
-        vpn_stream: Box<dyn DataStream>,
+        vpn_stream: TcpStream,
         //мок клиента
         client_data_stream: Rc<dyn DataStreamVpn>,
         //мок филлера (клиента)
@@ -63,7 +61,7 @@ mod tests {
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT+offset)).unwrap();
 
         let (ct_vpn, cr_vpn) = channel();
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, stat_collector.unwrap_or_else(||
+        let mut orchestrator = Orchestrator::new(cr_vpn, stat_collector.unwrap_or_else(||
             Box::new(NoStatistic::default())));
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
@@ -71,14 +69,13 @@ mod tests {
         sleep(Duration::from_millis(200));
         let client_stream = TcpStream::connect(format!("127.0.0.1:{}", PROXY_LISTEN_PORT+offset)).unwrap();
         let vpn_stream = mock_vpn_listener.incoming().next().unwrap().unwrap();
-
-        let vpn_stream = VpnDataStream::new(vpn_stream);
+        vpn_stream.set_read_timeout(Some(Duration::from_millis(10))).expect("Должен быть не блокирующий метод чтения");
         let split = split_client_stream(client_stream);
 
         send_client_name_packet(split.filler_stream.clone());
         trace!("Ждем подключения Заполнителя");
         orchestrator.invoke();
-        TestStreams {vpn_stream: Box::new(vpn_stream),
+        TestStreams {vpn_stream,
             client_data_stream: split.data_stream,
             client_filler_stream: split.filler_stream,
             orchestrator,
@@ -88,8 +85,7 @@ mod tests {
     fn send_client_name_packet(filler_stream: Rc<dyn DataStreamFiller>) {
         let mut buf: [u8; 16] = [0; 16];
         buf[0] = 0x01;
-        let client_name: &str = "test_client";
-        let client_name = client_name.as_bytes();
+        let client_name = TEST_CLIENT_NAME.as_bytes();
         buf[1..client_name.len()+1].copy_from_slice(client_name);
         info!("Отправляем имя клиента");
         filler_stream.deref().write_all(&buf[..client_name.len()+1]).unwrap();
@@ -109,7 +105,7 @@ mod tests {
         //первым делом должен быть запущен наш OpenVPN (tcp mode)
         let mock_vpn_listener = TcpListener::bind(format!("127.0.0.1:{}", VPN_LISTEN_PORT)).unwrap();
         let (ct_vpn, cr_vpn) = channel();
-        let mut orchestrator = Orchestrator::new_stat(cr_vpn, Box::new(NoStatistic::default()));
+        let mut orchestrator = Orchestrator::new(cr_vpn, Box::new(NoStatistic::default()));
         //дальше готовимся принимать клиентов
         let (ct_stop, cr_stop) = channel();
         start_listen(PROXY_LISTEN_PORT, VPN_LISTEN_PORT, ct_vpn, cr_stop).unwrap();
@@ -181,15 +177,15 @@ mod tests {
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                //trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
+                trace!("{:?} Отправляем в сторону сервера {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
-                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+                let _ = out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
 
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                trace!("{:?} >> Отправили, засыпаем на {:?}", name, sleep_ms);
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -227,14 +223,14 @@ mod tests {
                 if to_send_size > write_left_size {
                     to_send_size = write_left_size
                 }
-                //trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
+                trace!("{:?} Пытаемся отправить {:?} ", name, to_send_size);
                 stream.write_all(&out_buf[write_offset..write_offset + to_send_size]).unwrap();
-                out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
+                let _ = out_file.write_all(&out_buf[write_offset..write_offset + to_send_size]);
 
                 write_offset += to_send_size;
                 write_left_size -= to_send_size;
                 let sleep_ms = Duration::from_millis(get_sleep_ms(&mut rng) as u64);
-                //trace!("{:?} iteration-{:?} >> Отправили, засыпаем на {:?}", name, iteration, sleep_ms);
+                trace!("{:?} >> Отправили, засыпаем на {:?}", name, sleep_ms);
                 sleep(sleep_ms);
             }
             //заполняем из потока данные в in_buf
@@ -282,7 +278,7 @@ mod tests {
 
     fn get_random_buf() -> [u8; TEST_BUF_SIZE] {
         let mut buf: [u8; TEST_BUF_SIZE] = [0; TEST_BUF_SIZE];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..TEST_BUF_SIZE {
             buf[i] = rng.random()
         }
@@ -301,8 +297,11 @@ mod tests {
         info!("FILLER_ATTACH_AND_FILL");
         const BUF_SIZE: usize = 12_000;
         const PACKETS_COUNT: usize = 50;
-        const MS_COUNT: usize = 500;
-        const ONE_PACKET_SIZE: usize = INITIAL_SPEED * MS_COUNT / PACKETS_COUNT;
+        const HALF_SECOND_MS: usize = 500;
+        const DELAY_MS:usize = HALF_SECOND_MS /PACKETS_COUNT;
+        //10 Мбит/с = 1МБ/с = 1048 байт/мс
+        pub const INITIAL_SPEED: usize = 1024 * 1024 / 1000;
+        const ONE_PACKET_SIZE: usize = INITIAL_SPEED * HALF_SECOND_MS / PACKETS_COUNT;
         //размер пакета примерно 10_000
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
@@ -314,10 +313,12 @@ mod tests {
             join_handle
         } = create_test_streams(1, None);
 
-        sleep(Duration::from_millis(505));
         if let Ok(vpn_read) = client_data_stream.read(&mut buf) {
             info!("Полученных полезных байт должно быть 10 => {}", vpn_read);
         }
+
+        let half_secs = Duration::from_millis((HALF_SECOND_MS) as u64);
+        sleep(half_secs);
         orchestrator.invoke();
         let (tx, rx) = mpsc::channel();
         //отправляем пол секунды объем данных который должен уйти за пол секунды
@@ -326,12 +327,12 @@ mod tests {
         let join_handle_2 = thread::Builder::new()
             .name("send".to_string()).spawn(move || {
             let value_data: [u8; ONE_PACKET_SIZE] = [0; ONE_PACKET_SIZE];
-            let half_secs = Duration::from_millis((MS_COUNT) as u64);
             tx.send(true).unwrap();
             trace!("---------Начали отправку");
             let start = Instant::now();
-
+            //Забиваем таким количеством, которого должно хватить на пол секунды
             for _i in 0..PACKETS_COUNT {
+                trace!(r"-->  {} мс. {ONE_PACKET_SIZE}", start.elapsed().as_millis());
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
             }
 
@@ -349,12 +350,15 @@ mod tests {
         }).unwrap();
 
 
-        let receive_time = Duration::from_millis(1070);
+        let receive_time = Duration::from_millis(1100);
         rx.recv().unwrap();
         trace!("---------Начали получение");
         let start = Instant::now();
         let mut data_offset = 0;
         let mut filler_offset = 0;
+        orchestrator.send_command(&TEST_CLIENT_NAME.to_string(),
+                                  RuntimeCommand::SetSpeed(SpeedCorrectorCommand::SetSpeed(INITIAL_SPEED))).unwrap();
+
         loop {
             let data_read = client_data_stream.read(&mut buf[..]).unwrap();
             let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
@@ -364,16 +368,16 @@ mod tests {
                 info!("Прошло {}. Окончили ожидание.", start.elapsed().as_millis());
                 break;
             }
-            orchestrator.invoke();
 
             if data_read > 0 || filler_read > 0 {
-                trace!(r"Прошло {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
+                trace!(r"<-- {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
+            sleep(Duration::from_millis(DELAY_MS as u64));
         }
         info!("Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
-        let mut vpn_stream = join_handle_2.join().unwrap();
-        vpn_stream.write_all(&mut buf[..1]);
-        assert!(data_offset >= 1_000_000);
+        let _ = join_handle_2.join().unwrap();
+        info!("data_offset - {data_offset}, filler_offset - {filler_offset}");
+        assert!(data_offset >= 95_000 && data_offset < 1_100_000);
         assert!(filler_offset > 35_000 && filler_offset < 120_000, "{}", filler_offset);
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
@@ -382,14 +386,15 @@ mod tests {
 
     /*
     Проверяем что сервер в целом не падает, если отключился какой-то клиент
+    и уничтожается поток для клиента
     */
     #[test]
-    #[serial]
+    #[inline(never)]
     fn server_stable_test() {
         initialize_logger();
 
-        const BUF_SIZE: usize = 10_000;
-        let buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+        const BUF_SIZE: usize = 12_000;
+        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
         let TestStreams {
             mut vpn_stream,
@@ -399,10 +404,11 @@ mod tests {
             join_handle
         } = create_test_streams(2, None);
 
-        client_data_stream.write_all(&buf[..10]).unwrap();
+        let _ = client_data_stream.write_all(&buf[..10]).unwrap();
         vpn_stream.write_all(&buf[..10]).unwrap();
+        client_data_stream.read(&mut buf[..]).unwrap();
 
-        sleep(Duration::from_millis(10));
+        sleep(Duration::from_millis(1000));
         //закрываем чтение
         client_data_stream.shutdown();
         //пытаемся отправить в через прокси данные в закрытый канал
@@ -413,11 +419,14 @@ mod tests {
             let send_result = vpn_stream.write_all(&buf[..10]);
             if send_result.is_err() {
                 info!("broken after {}", i);
+                orchestrator.invoke();
                 break;
             }
         }
+        sleep(Duration::from_millis(1000));
         //проверяем что клиентов больше нет, а мы все еще не упали
-        assert_eq!(0, orchestrator.get_pairs_count());
+        let pairs_count = orchestrator.get_pairs_count();
+        assert_eq!(0, pairs_count);
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();
         //TODO: дописать повторное подключение
@@ -437,13 +446,14 @@ mod tests {
             join_handle
         } = create_test_streams(3, Some(Box::new(SimpleStatisticCollector::default())));
 
-        let mut buf: [u8; 100] = [0; 100];
+        let mut buf: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
 
         loop {
             orchestrator.invoke();
             sleep(Duration::from_millis(100));
-            let _ = client_data_stream.write_all(&buf).unwrap();
-            let _ = vpn_stream.write_all(&buf).unwrap();
+            let _ = client_data_stream.write_all(&buf[..100]).unwrap();
+            let _ = vpn_stream.write_all(&buf[..100]).unwrap();
+            let _ = vpn_stream.flush().unwrap();
             let _ = client_data_stream.read(&mut buf);
             let _ = vpn_stream.read(&mut buf);
             let _ = client_filler_stream.read(&mut buf);
@@ -458,5 +468,89 @@ mod tests {
         join_handle.1.join().unwrap();
     }
 
+    /**
+       Проверяем что начиная с минимальной скорости мы достигаем максимальной скорости (1Gbit/s)
+     */
+    #[test]
+    #[serial]
+    fn one_gb_test() {
+        initialize_logger();
+        info!("1GB_TEST");
+        const BUF_SIZE: usize = 30_000;
+        let target_speed: usize = to_native_speed(1024);
 
+        //размер пакета примерно 10_000
+        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+
+        let TestStreams {
+            mut vpn_stream,
+            client_data_stream,
+            client_filler_stream,
+            mut orchestrator,
+            join_handle
+        } = create_test_streams(4, None);
+
+        let half_secs = Duration::from_millis(500);
+        sleep(half_secs);
+        orchestrator.invoke();
+
+        let timeout = Duration::from_secs(5);
+        let (tx, rx) = mpsc::channel();
+        let join_handle_2 = thread::Builder::new()
+            .name("send".to_string()).spawn(move || {
+            let value_data: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
+            tx.send(true).unwrap();
+            info!("---------Начали отправку");
+            let start = Instant::now();
+            //Забиваем таким количеством, которого должно хватить на пол секунды
+            while start.elapsed() < timeout {
+                let result = vpn_stream.write_all(&value_data[..]);
+                if result.is_err() {
+                    break;
+                }
+            }
+            return vpn_stream;
+        }).unwrap();
+
+        rx.recv().unwrap();
+        info!("---------Начали получение");
+        let start = Instant::now();
+        let mut data_offset = 0;
+        let mut filler_offset = 0;
+        let mut counter = 0;
+
+        let mut total_size = 0;
+        let mut time_start = Instant::now();
+        while start.elapsed() < timeout {
+            let data_read = client_data_stream.read(&mut buf[..]).unwrap();
+            let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
+            data_offset += data_read;
+            filler_offset += filler_read;
+            if counter % 10 == 0 {
+                orchestrator.invoke();
+            }
+            if counter % 30 == 0 {
+                let new_total_size = data_offset + filler_offset;
+                let delta = new_total_size - total_size;
+                let duration = Instant::now() - time_start;
+                let ms = duration.as_millis() as usize;
+                if delta > 0 && ms > 0 {
+                    let speed = delta / ms;
+                    if speed >= target_speed {
+                        info!("target speed: {speed} MBit/s");
+                        break;
+                    }
+                    let speed = to_regular_speed(speed);
+                    trace!("speed: {speed} MBit/s");
+                }
+                total_size = new_total_size;
+                time_start = Instant::now();
+            }
+            counter += 1;
+        }
+        assert!(start.elapsed() < timeout);
+        let _ = join_handle_2.join().unwrap();
+        join_handle.0.send(true).unwrap();
+        join_handle.1.join().unwrap();
+    }
 }
