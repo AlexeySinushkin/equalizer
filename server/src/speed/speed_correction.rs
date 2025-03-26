@@ -8,7 +8,7 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, MODIFY_PERIOD, PERCENT_100, SHORT_TERM, SHUTDOWN_SPEED};
+use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, MODIFY_PERIOD, PERCENT_100, SHUTDOWN_SPEED};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
@@ -16,7 +16,7 @@ use log::debug;
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
-const LOW_SPEED_PROPORTION: usize = 90;
+//const LOW_SPEED_PROPORTION: usize = 90;
 //свободный ход в %. Если отклонились от целевого значения на эту величину - ничего не предпринимаем.
 const FREE_PLAY: usize = 2;
 //Если процент полезных данных ниже этого значения - уменьшаем скорость (скорость избыточна)

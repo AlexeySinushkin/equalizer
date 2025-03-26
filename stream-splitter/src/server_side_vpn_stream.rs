@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use easy_error::{Error, ResultExt};
 use crate::{packet, DataStream, READ_START_AWAIT_TIMEOUT};

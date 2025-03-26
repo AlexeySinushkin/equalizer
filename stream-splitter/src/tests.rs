@@ -46,7 +46,7 @@ mod tests {
         thread::spawn(move || {
             let stream = client_listener.accept().expect("client connected");
             let mut split = split_server_stream(stream.0);
-            split.data_stream.write_all(b"11111").expect("write data"); //0x49
+            split.data_stream_write.write_all(b"11111").expect("write data"); //0x49
             split
                 .filler_stream
                 .write_all(b"22222")
@@ -55,7 +55,7 @@ mod tests {
                 .filler_stream
                 .write_all(b"33333")
                 .expect("write filler"); //0x51
-            split.data_stream.write_all(b"44444").expect("write data"); //0x52
+            split.data_stream_write.write_all(b"44444").expect("write data"); //0x52
         });
         thread::sleep(std::time::Duration::from_millis(100));
 
@@ -94,7 +94,7 @@ mod tests {
                 .filler_stream
                 .write_all(b"33333")
                 .expect("write filler"); //0x51
-            split.data_stream.write_all(b"44444").expect("write data"); //0x52
+            split.data_stream_write.write_all(b"44444").expect("write data"); //0x52
         });
         sleep(Duration::from_millis(100));
 
@@ -219,7 +219,7 @@ mod tests {
         info!("Begin read data");
         let mut buf = [0; MAX_BODY_SIZE];
         //читаем 0 (количество прочитанного), если ничего не прочитали
-        let size = split.data_stream.read(&mut buf[..]).unwrap();
+        let size = split.data_stream_read.read(&mut buf[..]).unwrap();
 
         assert_eq!(size, 0);
         join_handle.join().expect("join");
@@ -235,10 +235,10 @@ mod tests {
             let stream = client_listener.accept().expect("client connected").0;
             let mut split = split_server_stream(stream);
             let mut buf = [0; MAX_BODY_SIZE];
-            split.data_stream.write_all(&buf).unwrap();
+            split.data_stream_write.write_all(&buf).unwrap();
 
             sleep(Duration::from_millis(100));
-            let read_size = split.data_stream.read(&mut buf).expect("read data");
+            let read_size = split.data_stream_read.read(&mut buf).expect("read data");
             assert_eq!(MAX_BODY_SIZE, read_size);
         });
         

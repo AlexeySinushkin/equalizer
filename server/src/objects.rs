@@ -32,9 +32,11 @@ pub struct SentPacket {
  */
 pub struct Pair {
     //от эквалайзера к впн серверу
-    pub up_stream: Box<dyn DataStream>,
+    pub up_stream_read: Box<dyn DataStream>,
+    pub up_stream_write: Box<dyn DataStream>,
     //от впн клиента к эквалайзеру
-    pub client_stream: Box<dyn DataStream>,
+    pub client_stream_read: Box<dyn DataStream>,
+    pub client_stream_write: Box<dyn DataStream>,
     //от клиента к эквалайзеру (для получения данных-заполнителя)
     pub filler_stream: Box<dyn DataStream>,
     pub key: String,
