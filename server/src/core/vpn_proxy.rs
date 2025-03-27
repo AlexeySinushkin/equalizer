@@ -136,7 +136,7 @@ impl ThreadWorkingSet {
                     };
                     match result {
                         Err(e) => {
-                            error!("{} {}", e.ctx, e.location);
+                            error!("{:?} {} {}", e.cause, e.ctx, e.location);
                             let _ = instance.ct_state.send(ProxyState::Broken);
                             let _ = instance.data_read.shutdown();
                             let _ = instance.data_write.shutdown();
