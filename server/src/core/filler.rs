@@ -8,7 +8,7 @@ use crate::objects::{HotPotatoInfo, Packet, SentPacket, MAX_STAT_COUNT, ONE_PACK
 use std::ops::{Sub};
 use std::time::{Duration, Instant};
 const ANALYZE_PERIOD_MS: u64 = 100;
-const MIN_BYTES_TO_FILL:usize = ONE_PACKET_MAX_SIZE/4;
+const MIN_BYTES_TO_FILL:usize = 1024;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
 enum PacketType {
     Data,

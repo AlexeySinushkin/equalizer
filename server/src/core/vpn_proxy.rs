@@ -3,7 +3,7 @@ use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::{SpeedCorrectorCommand, SHUTDOWN_SPEED};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -161,12 +161,12 @@ impl ThreadWorkingSet {
         if available_space > A_FEW_SPACE {
             let vpn_incoming_data_size = self.data_read.read(&mut self.buf[..])?;
             if vpn_incoming_data_size > 0  {
-                //trace!("=>> {}", vpn_incoming_data_size);
+                trace!("=>> {}", vpn_incoming_data_size);
                 self.data_write.write_all(&self.buf[..vpn_incoming_data_size])?;
                 filler.data_was_sent(vpn_incoming_data_size);
                 some_work = true;
             }else if let Some(packet) = filler.get_filler_packet(){
-                //trace!("=>> filler {}", packet.size);
+                trace!("=>> filler {}", packet.size);
                 self.filler_write.write_all(&packet.buf[..packet.size])?;
                 filler.filler_was_sent(packet.size);
                 some_work = true;
@@ -208,6 +208,7 @@ impl ThreadWorkingSet {
 
         let vpn_incoming_data_size = self.data_read.read(&mut self.buf[..])?;
         if vpn_incoming_data_size > 0  {
+            trace!("->> {}", vpn_incoming_data_size);
             self.data_write.write_all(&self.buf[..vpn_incoming_data_size])?;
             filler.data_was_sent(vpn_incoming_data_size);
             some_work = true;

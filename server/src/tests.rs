@@ -291,7 +291,7 @@ mod tests {
     При скорости 10Мбит/с за 1.1с мы должны получить 1Мб полезных данных и 100кб заполнителя
      */
     #[test]
-    #[serial]
+    #[inline(never)]
     fn filler_attach_and_fill() {
         initialize_logger();
         info!("FILLER_ATTACH_AND_FILL");
@@ -334,6 +334,7 @@ mod tests {
             for _i in 0..PACKETS_COUNT {
                 trace!(r"-->  {} мс. {ONE_PACKET_SIZE}", start.elapsed().as_millis());
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
+                sleep(Duration::from_millis(DELAY_MS as u64));
             }
 
             info!("AWAITING HALF SECOND");
