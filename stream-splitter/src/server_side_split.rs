@@ -1,5 +1,5 @@
 use crate::packet::*;
-use crate::{DataStream, READ_START_AWAIT_TIMEOUT};
+use crate::{DataStream, MAX_PACKET_SIZE, READ_START_AWAIT_TIMEOUT};
 use std::net::{Shutdown, TcpStream};
 use easy_error::{bail, Error, ResultExt};
 use log::warn;
@@ -28,16 +28,19 @@ fn shutdown_stream(stream: &TcpStream) {
 }
 
 pub struct ClientDataStream {
+    pre_alloc_buf: [u8; MAX_PACKET_SIZE],
     client_stream: TcpStream,
 }
 
 pub struct FillerDataStream {
+    pre_alloc_buf: [u8; MAX_PACKET_SIZE],
     client_stream: TcpStream,
 }
 
 impl ClientDataStream {
     fn new(client_stream: TcpStream) -> ClientDataStream {
         Self {
+            pre_alloc_buf: [0; MAX_PACKET_SIZE],
             client_stream,
         }
     }
@@ -45,7 +48,7 @@ impl ClientDataStream {
 
 impl DataStream for ClientDataStream {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
-        write_packet(buf, TYPE_DATA, &mut self.client_stream)
+        write_packet(buf, TYPE_DATA, &mut self.pre_alloc_buf, &mut self.client_stream)
             .context("Write data packet in server side split")
     }
 
@@ -69,13 +72,16 @@ impl DataStream for ClientDataStream {
 
 impl FillerDataStream {
     fn new(client_stream: TcpStream) -> FillerDataStream {
-        Self { client_stream }
+        Self {
+            pre_alloc_buf: [0; MAX_PACKET_SIZE],
+            client_stream,
+        }
     }
 }
 
 impl DataStream for FillerDataStream {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
-        write_packet(buf, TYPE_FILLER, &mut self.client_stream)
+        write_packet(buf, TYPE_FILLER, &mut self.pre_alloc_buf, &mut self.client_stream)
     }
 
     fn read(&mut self, dst: &mut [u8]) -> Result<usize, Error> {

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use crate::packet::*;
-use crate::{MAX_BODY_SIZE, READ_START_AWAIT_TIMEOUT};
+use crate::{MAX_PACKET_SIZE, READ_START_AWAIT_TIMEOUT};
 use log::debug;
 use std::net::{Shutdown, TcpStream};
 use std::rc::Rc;
@@ -60,14 +60,15 @@ impl CommonDataStream {
         let filler_pending_queue: VecDeque<QueuedPacket> = VecDeque::new();
         Self {
             client_stream : RefCell::new(client_stream),
-            temp_buf: RefCell::new([0; MAX_BODY_SIZE]),
+            temp_buf: RefCell::new([0; MAX_PACKET_SIZE]),
             data_pending_queue: RefCell::new(data_pending_queue),
             filler_pending_queue: RefCell::new(filler_pending_queue)
         }
     }
     pub fn write_as_packet(&self, packet_type: u8, buf: &[u8]) -> Result<(), Error> {
         let stream = &mut *self.client_stream.borrow_mut();
-        write_packet(buf, packet_type, stream)
+        let mut tmp_buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
+        write_packet(buf, packet_type, &mut tmp_buf, stream)
     }
     pub fn read_packet(&self, target_type: u8, redirect_type: u8, dst: &mut [u8]) -> Result<usize, Error> {
         //Если в методе read пришел чужой пакет - перенаправляем его получателю
