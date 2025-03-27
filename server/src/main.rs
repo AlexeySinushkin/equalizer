@@ -22,7 +22,7 @@ mod statistic;
 mod c_client_tests;
 
 fn main() {
-    SimpleLogger::init(LevelFilter::Debug, Config::default()).expect("Логгер проинициализирован");
+    SimpleLogger::init(LevelFilter::Warn, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("Example usage: ./equalizer 12010 1194");

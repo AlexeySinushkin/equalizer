@@ -49,6 +49,7 @@ struct ThreadWorkingSet {
     key: String,
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
+    ct_stop: Sender<bool>,
     data_read: Box<dyn DataStream>,
     data_write: Box<dyn DataStream>,
     filler_write: Box<dyn DataStream>,
@@ -62,12 +63,14 @@ impl VpnProxy {
     pub fn new(pair: Pair) -> VpnProxy {
         let (ct_command, cr_command) = channel();
         let (ct_state, cr_state) = channel();
+        let (ct_stop, cr_stop) = channel();
         let key = pair.key.clone();
 
         let thread_working_set = ThreadWorkingSet {
             key: key.clone(),
             cr_command,
-            ct_state: ct_state.clone(),
+            ct_state,
+            ct_stop,
             free_mode: true,
             data_read: pair.up_stream_read,
             data_write: pair.client_stream_write,
@@ -83,6 +86,10 @@ impl VpnProxy {
                 let mut data_read = pair.client_stream_read;
                 let mut data_write = pair.up_stream_write;
                 loop{
+                    if cr_stop.try_recv().is_ok() {
+                        info!("exit from receiving from client thread");
+                        break;
+                    }
                     if let Ok(size) = data_read.read(&mut buf[..]){
                         if size > 0 {
                             //перенаправляем его VPN серверу
@@ -137,6 +144,9 @@ impl ThreadWorkingSet {
                     match result {
                         Err(e) => {
                             error!("{:?} {} {}", e.cause, e.ctx, e.location);
+                            if instance.ct_stop.send(true).is_err() {
+                                error!("Failed to stop cts thread");
+                            }
                             let _ = instance.ct_state.send(ProxyState::Broken);
                             let _ = instance.data_read.shutdown();
                             let _ = instance.data_write.shutdown();
