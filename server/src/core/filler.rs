@@ -189,6 +189,7 @@ mod tests {
         let fill_packet = filler.get_filler_packet();
         let from = 4 * INITIAL_SPEED;
         let to = 6 * INITIAL_SPEED;
+        assert!(fill_packet.is_some());
         let size = fill_packet.unwrap().size;
         info!("{from} < {size} < {to}");
         assert!(size > from && size < to);
