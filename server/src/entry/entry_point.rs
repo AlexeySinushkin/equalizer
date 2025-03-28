@@ -69,8 +69,10 @@ impl Pair {
         sleep(Duration::from_millis(500));
         let key = Pair::get_key(filler_stream);
         Pair {
-            up_stream: Box::new(VpnDataStream::new(up_stream)),
-            client_stream: split.data_stream,
+            up_stream_read: Box::new(VpnDataStream::new(up_stream.try_clone().unwrap())),
+            up_stream_write: Box::new(VpnDataStream::new(up_stream)),
+            client_stream_read: split.data_stream_read,
+            client_stream_write: split.data_stream_write,
             filler_stream: split.filler_stream,
             key,
         }

@@ -5,7 +5,8 @@ use easy_error::{bail, Error, ResultExt};
 use log::warn;
 
 pub struct ServerSideSplit {
-    pub data_stream: Box<dyn DataStream>,
+    pub data_stream_read: Box<dyn DataStream>,
+    pub data_stream_write: Box<dyn DataStream>,
     pub filler_stream: Box<dyn DataStream>,
 }
 
@@ -17,7 +18,8 @@ pub fn split_server_stream<'a>(client_stream: TcpStream) -> ServerSideSplit {
         .try_clone()
         .expect("Failed to clone TcpStream");
     ServerSideSplit {
-        data_stream: Box::new(ClientDataStream::new(client_stream)),
+        data_stream_read: Box::new(ClientDataStream::new(client_stream.try_clone().unwrap())),
+        data_stream_write: Box::new(ClientDataStream::new(client_stream)),
         filler_stream: Box::new(FillerDataStream::new(filler_stream)),
     }
 }
@@ -67,7 +69,9 @@ impl DataStream for ClientDataStream {
 
 impl FillerDataStream {
     fn new(client_stream: TcpStream) -> FillerDataStream {
-        Self { client_stream }
+        Self {
+            client_stream,
+        }
     }
 }
 

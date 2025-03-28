@@ -5,7 +5,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::thread::sleep;
 use std::time::Duration;
-use crate::MAX_BODY_SIZE;
+use crate::{MAX_BODY_SIZE, MAX_PACKET_SIZE};
 /*
    0x54[1], тип[1], размер[2]
 */
@@ -19,7 +19,7 @@ pub const LENGTH_BYTE_LSB_INDEX: usize = 2;
 pub const LENGTH_BYTE_MSB_INDEX: usize = 3;
 //pub const DATA_BYTE_INDEX: usize = HEADER_SIZE;
 
-pub type Buffer = [u8; MAX_BODY_SIZE];
+pub type Buffer = [u8; MAX_PACKET_SIZE];
 
 struct Header {
     packet_type: u8,
@@ -43,7 +43,7 @@ pub struct QueuedPacket {
 impl QueuedPacket {
     pub fn copy_from(buf: &[u8]) -> QueuedPacket {
         let mut packet = QueuedPacket {
-            buf: [0; MAX_BODY_SIZE],
+            buf: [0; MAX_PACKET_SIZE],
             len: 0,
         };
         packet.buf[..buf.len()].copy_from_slice(buf);
@@ -52,15 +52,20 @@ impl QueuedPacket {
     }
 }
 
-pub fn write_packet(buf: &[u8], packet_type: u8, stream: &mut TcpStream) -> Result<(), Error> {
+pub fn write_packet(buf: &[u8], packet_type: u8,
+                    stream: &mut TcpStream) -> Result<(), Error> {
     let size = buf.len();
-    let mut head_buf = create_packet_header(packet_type, size);
+    let head_buf = create_packet_header(packet_type, size);
+    let total_size = HEADER_SIZE + size;
+    let mut tmp_buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
+    tmp_buf[..HEADER_SIZE].copy_from_slice(&head_buf);
+    tmp_buf[HEADER_SIZE..total_size].copy_from_slice(buf);
+
+    // Send the full packet at once
     stream
-        .write_all(&mut head_buf)
-        .context("Write header in write_packet")?;
-    write(buf, stream)
-        .context("Write data in write_packet")?;
-    stream.flush().context("Flush stream in write_packet")
+        .write_all(&tmp_buf[..total_size])
+        .context("Write full packet in write_packet")?;
+    Ok(())
 }
 
 pub fn read_packet(

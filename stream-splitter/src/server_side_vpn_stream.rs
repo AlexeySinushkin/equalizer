@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::net::{Shutdown, TcpStream};
 use easy_error::{Error, ResultExt};
 use crate::{packet, DataStream, READ_START_AWAIT_TIMEOUT};
@@ -12,6 +11,9 @@ impl VpnDataStream {
         vpn_data_stream
             .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
             .expect("Архитектура подразумевает не блокирующий метод чтения");
+        vpn_data_stream
+            .set_nodelay(true)
+            .expect("Нет задержек отправки");
         Self {
             vpn_data_stream,
         }
@@ -23,8 +25,7 @@ impl DataStream for VpnDataStream {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), Error> {
         packet::write(buf, &mut self.vpn_data_stream)
             .context("Failed to write to vpn stream")?;
-        self.vpn_data_stream.flush()
-            .context("Failed to flush vpn stream")
+        Ok(())
     }
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {

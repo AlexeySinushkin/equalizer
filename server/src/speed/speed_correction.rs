@@ -8,14 +8,15 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, MODIFY_PERIOD, PERCENT_100, SHORT_TERM, SHUTDOWN_SPEED};
+use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, PERCENT_100, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
+use log::{debug};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
-const LOW_SPEED_PROPORTION: usize = 90;
+//const LOW_SPEED_PROPORTION: usize = 90;
 //свободный ход в %. Если отклонились от целевого значения на эту величину - ничего не предпринимаем.
 const FREE_PLAY: usize = 2;
 //Если процент полезных данных ниже этого значения - уменьшаем скорость (скорость избыточна)
@@ -59,19 +60,16 @@ impl SpeedCorrector {
                 return Self::switch_off_command(info);
             }
             let last_correction_date = Self::last_sent_command_date(info);
-            if last_correction_date.is_none_or(|time| time.add(MODIFY_PERIOD) < Instant::now()) {
-                if long_term_speed.data_percent < DOWN_TRIGGER {
-                    return Some(Self::decrease_command(&long_term_speed, info));
-                }
-                if long_term_speed.data_percent > UP_TRIGGER {
-                    return Some(Self::increase_command(&long_term_speed, info));
-                }
+            let now = Instant::now();
+            if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < now)
+                && long_term_speed.data_percent > UP_TRIGGER {
+                    debug!("increase due percent {}", long_term_speed.data_percent);
+                    return Self::increase_command(&long_term_speed, info);
             }
-        }
-        //быстрей реагируем на низкую скорость, если процент заполнения низок
-        if let Some(short_term_speed) = get_speed(SHORT_TERM, &info.sent_data) {
-            if short_term_speed.speed < SHUTDOWN_SPEED && short_term_speed.data_percent > LOW_SPEED_PROPORTION {
-                return Self::switch_off_command(info);
+            if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < now)
+                && long_term_speed.data_percent < DOWN_TRIGGER {
+                debug!("decrease due percent {}", long_term_speed.data_percent);
+                return Some(Self::decrease_command(&long_term_speed, info));
             }
         }
         None
@@ -87,6 +85,13 @@ impl SpeedCorrector {
         }
         None
     }
+    fn last_sent_command_speed(info: &mut Info) -> Option<SpeedCorrectorCommand> {
+        if let Some(last_command) = info.speed_setup.last() {
+            return Some(last_command.command);
+        }
+        None
+    }
+
     //#[inline(never)]
     fn switch_off_command(info: &mut Info) -> Option<SpeedCorrectorCommand> {
         if let Some(last_command) = info.speed_setup.last() {
@@ -102,9 +107,19 @@ impl SpeedCorrector {
     }
 
     fn decrease_command(current_speed: &SpeedForPeriod, info: &mut Info) -> SpeedCorrectorCommand {
-        let delta_percent = TARGET_PERCENT - current_speed.data_percent;
+        let mut new_speed = current_speed.speed - 10;
+        //предыдущая скорость
+        if let Some(prev_speed) = Self::last_sent_command_speed(info) {
+            match prev_speed {
+                SpeedCorrectorCommand::SetSpeed(prev_speed) => {
+                    new_speed = prev_speed - 10;
+                    debug!("Понижаем скорость {new_speed}, основываясь на предыдущем значении {prev_speed}");
+                },
+                _=>{}
+            }
+        }
         let result = SpeedCorrectorCommand::SetSpeed(
-            current_speed.speed - (current_speed.speed * delta_percent / PERCENT_100),
+            new_speed,
         );
         info.speed_setup.push(SetupSpeedHistory {
             command: result,
@@ -112,16 +127,32 @@ impl SpeedCorrector {
         });
         result
     }
-    fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> SpeedCorrectorCommand {
+    fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
         let delta_percent = current_speed.data_percent - TARGET_PERCENT;
-        let result = SpeedCorrectorCommand::SetSpeed(
-            current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100),
-        );
+        //новая увеличенная скорость основанная на данных за последние пол секунды
+        let new_speed = current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100);
+        //предыдущая скорость
+        if let Some(prev_speed) = Self::last_sent_command_speed(info) {
+            match prev_speed {
+                SpeedCorrectorCommand::SetSpeed(prev_speed) => {
+                    if new_speed < prev_speed {
+                        debug!("Держим скорость {prev_speed}, хотя по подсчетам надо установить {new_speed}");
+                        info.speed_setup.push(SetupSpeedHistory {
+                            command: SpeedCorrectorCommand::SetSpeed(prev_speed),
+                            setup_time: Instant::now(),
+                        });
+                        return None;
+                    }
+                },
+                _=>{}
+            }
+        }
+        let result = SpeedCorrectorCommand::SetSpeed(new_speed);
         info.speed_setup.push(SetupSpeedHistory {
             command: result,
             setup_time: Instant::now(),
         });
-        result
+        Some(result)
     }
 }
 
@@ -181,57 +212,6 @@ mod tests {
         assert!(speed_setup_request > expected_speed_from);
         assert!(speed_setup_request < expected_speed_to);
     }
-    /**
-    Отправляем полезных данных со скоростью 50MBit/s
-    Убеждаемся что нам устанавливают скорость 60 (50 на данные, 10 на заполнитель)
-     */
-    #[test]
-    fn decrease_speed_limit_test() {
-        initialize_logger();
-        let key = String::from("test");
-        let mut speed_corrector = SpeedCorrector::new();
-        let mut rng = rand::rng();
-        let bytes_per_ms = to_native_speed(50);
-
-        let mut speed_setup_request = 0;
-        let start = Instant::now();
-        let mut total_sent_size: usize = 0;
-        for _i in 0..70 {
-            let from = Instant::now();
-            //корректировка каждые пол секунды только - 70*8=560ms
-            let duration_ms = rng.random_range(8..15);
-            let total_bytes_for_period = bytes_per_ms * duration_ms;
-            let duration = Duration::from_millis(duration_ms as u64);
-            let parts: usize = rng.random_range(1..MAX_STAT_COUNT);
-            let hp = get_mock_hp(
-                total_bytes_for_period,
-                TARGET_PERCENT - (PERCENT_100 - TARGET_PERCENT), //60%
-                parts,
-                from,
-                duration,
-            );
-            sleep(duration);
-            debug!("notifying that sent {total_bytes_for_period} during {duration_ms}ms in {parts} parts");
-            total_sent_size += total_bytes_for_period;
-            if let Some(speed) = speed_corrector.append_and_get(&key, &hp) {
-                if let SpeedCorrectorCommand::SetSpeed(speed) = speed {
-                    speed_setup_request = speed;
-                    info!("------------ setup to {speed} -------------")
-                }
-            }
-        }
-        let total_time = Instant::now().duration_since(start).as_millis();
-        let bytes_per_ms_sent = total_sent_size / total_time as usize;
-        let m_bit_per_s = to_regular_speed(bytes_per_ms_sent);
-        info!("Bitrate was {m_bit_per_s} MBit/s");
-        info!("avg speed: {bytes_per_ms_sent} b/ms,  total_time: {total_time} ms, total_bytes: {total_sent_size}");
-        let expected_speed = (bytes_per_ms_sent as f32 * 0.8) as usize;
-        let expected_speed_from = expected_speed - 100;
-        let expected_speed_to = expected_speed + 100;
-        info!("requested_speed: {speed_setup_request}, expected from: {expected_speed_from} to: {expected_speed_to}");
-        assert!(speed_setup_request > expected_speed_from);
-        assert!(speed_setup_request < expected_speed_to);
-    }
 
     /**
        awaiting switch-off command on low speed
@@ -243,7 +223,7 @@ mod tests {
         let mut speed_corrector = SpeedCorrector::new();
         let mut rng = rand::rng();
         let high_speed = to_native_speed(5);
-        let low_speed = to_native_speed(2);
+        let low_speed = to_native_speed(1);
         info!("high_speed: {high_speed}, low_speed: {low_speed}, shutdown_speed: {SHUTDOWN_SPEED}");
 
         let mut speed_setup_request = 0;

@@ -22,7 +22,7 @@ mod statistic;
 mod c_client_tests;
 
 fn main() {
-    SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
+
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("Example usage: ./equalizer 12010 1194");
@@ -40,7 +40,11 @@ To run as service /absolute_path/equalizer 12010 1194 --service
     let proxy_listen_port: u16 = *&args.get(1).unwrap().parse().unwrap();
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let service_mode: bool = args.len() > 3 && args.get(3).unwrap().eq("--service"); //TODO to use some lib
-
+    if service_mode {
+        SimpleLogger::init(LevelFilter::Warn, Config::default()).expect("Логгер проинициализирован");
+    }else{
+        SimpleLogger::init(LevelFilter::Debug, Config::default()).expect("Логгер проинициализирован");
+    }
     let (ct_pair, cr_pair) = channel();
     let (_ct_stop, cr_stop) = channel();
     let join = start_listen(proxy_listen_port, vpn_listen_port, ct_pair, cr_stop).unwrap();

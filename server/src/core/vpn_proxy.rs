@@ -3,12 +3,13 @@ use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::{SpeedCorrectorCommand, SHUTDOWN_SPEED};
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use easy_error::{bail, Error, ResultExt};
+use splitter::DataStream;
 
 const A_FEW_SPACE: usize = 100;
 const BURNOUT_DELAY: Duration = Duration::from_micros(500);
@@ -16,7 +17,7 @@ const BURNOUT_DELAY: Duration = Duration::from_micros(500);
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
     cr_state: Receiver<ProxyState>,
-    join_handle: JoinHandle<()>,
+    join_handle_stc: JoinHandle<()>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
     //будем использовать IP tun интерфейса
     pub key: String,
@@ -47,7 +48,11 @@ struct ThreadWorkingSet {
     key: String,
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
-    pair: Pair,
+    up_read: Box<dyn DataStream>,
+    down_write: Box<dyn DataStream>,
+    filler_write: Box<dyn DataStream>,
+    down_read: Box<dyn DataStream>,
+    up_write: Box<dyn DataStream>,
     //without throttler & filler
     free_mode: bool,
     //временный буфер
@@ -63,19 +68,23 @@ impl VpnProxy {
         let thread_working_set = ThreadWorkingSet {
             key: key.clone(),
             cr_command,
-            ct_state: ct_state.clone(),
+            ct_state,
             free_mode: true,
-            pair,
+            up_read: pair.up_stream_read,
+            down_write: pair.client_stream_write,
+            filler_write: pair.filler_stream,
+            down_read: pair.client_stream_read,
+            up_write: pair.up_stream_write,
             buf: [0; ONE_PACKET_MAX_SIZE],
         };
 
-        let join_handle = ThreadWorkingSet::thread_start(thread_working_set);
+        let join_handle_stc = ThreadWorkingSet::thread_start(thread_working_set);
 
 
         Self {
             ct_command,
             cr_state,
-            join_handle,
+            join_handle_stc,
             key: key.clone(),
         }
     }
@@ -83,9 +92,10 @@ impl VpnProxy {
 impl Drop for VpnProxy {
     fn drop(&mut self) {
         info!("Dropping VpnProxy. Thread {}. Finished: {}. {:?}",
-            self.join_handle.thread().name().unwrap(),
-            self.join_handle.is_finished(),
-            self.join_handle.thread().id());
+            self.join_handle_stc.thread().name().unwrap(),
+            self.join_handle_stc.is_finished(),
+            self.join_handle_stc.thread().id());
+
     }
 }
 
@@ -107,10 +117,10 @@ impl ThreadWorkingSet {
                     };
                     match result {
                         Err(e) => {
-                            error!("{} {}", e.ctx, e.location);
+                            error!("{:?} {} {}", e.cause, e.ctx, e.location);
                             let _ = instance.ct_state.send(ProxyState::Broken);
-                            let _ = instance.pair.client_stream.shutdown();
-                            let _ = instance.pair.up_stream.shutdown();
+                            let _ = instance.up_read.shutdown();
+                            let _ = instance.down_write.shutdown();
                             break;
                         }
                         Ok(_) => {}
@@ -126,26 +136,25 @@ impl ThreadWorkingSet {
         filler: &mut Filler,
     ) -> Result<(), Error> {
         let mut some_work = false;
-        //GET запрос на чтение нового видоса
-        let size= self.pair.client_stream.read(&mut self.buf[..])?;
+        let size = self.down_read.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
-            //trace!("->> {}", size);
-            self.pair.up_stream.write_all(&self.buf[..size])?;
+            trace!("->> {}", size);
+            self.up_write.write_all(&self.buf[..size])?;
             some_work = true;
         }
         //если есть место
         let available_space = filler.get_available_space();
         if available_space > A_FEW_SPACE {
-            let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..])?;
+            let vpn_incoming_data_size = self.up_read.read(&mut self.buf[..])?;
             if vpn_incoming_data_size > 0  {
-                //trace!("=>> {}", vpn_incoming_data_size);
-                self.pair.client_stream.write_all(&self.buf[..vpn_incoming_data_size])?;
+                trace!("=>> {}", vpn_incoming_data_size);
+                self.down_write.write_all(&self.buf[..vpn_incoming_data_size])?;
                 filler.data_was_sent(vpn_incoming_data_size);
                 some_work = true;
             }else if let Some(packet) = filler.get_filler_packet(){
-                //trace!("=>> filler {}", packet.size);
-                self.pair.filler_stream.write_all(&packet.buf[..packet.size])?;
+                trace!("=>> filler {}", packet.size);
+                self.filler_write.write_all(&packet.buf[..packet.size])?;
                 filler.filler_was_sent(packet.size);
                 some_work = true;
             }
@@ -183,14 +192,17 @@ impl ThreadWorkingSet {
         filler: &mut Filler,
     ) -> Result<(), Error> {
         let mut some_work = false;
-        let size= self.pair.client_stream.read(&mut self.buf[..])?;
+        let size = self.down_read.read(&mut self.buf[..])?;
         if size > 0 {
-            self.pair.up_stream.write_all(&self.buf[..size])?;
+            //перенаправляем его VPN серверу
+            trace!("->> {}", size);
+            self.up_write.write_all(&self.buf[..size])?;
             some_work = true;
         }
-        let vpn_incoming_data_size = self.pair.up_stream.read(&mut self.buf[..])?;
+        let vpn_incoming_data_size = self.up_read.read(&mut self.buf[..])?;
         if vpn_incoming_data_size > 0  {
-            self.pair.client_stream.write_all(&self.buf[..vpn_incoming_data_size])?;
+            trace!("->> {}", vpn_incoming_data_size);
+            self.down_write.write_all(&self.buf[..vpn_incoming_data_size])?;
             filler.data_was_sent(vpn_incoming_data_size);
             some_work = true;
         }

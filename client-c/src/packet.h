@@ -4,7 +4,7 @@
 #define _PACKET_H
 
 #define HEADER_SIZE 4
-#define MAX_BODY_SIZE 10240
+#define MAX_BODY_SIZE 65530
 
 #define FIRST_BYTE 0x54
 #define TYPE_DATA 0x55

@@ -291,11 +291,11 @@ mod tests {
     При скорости 10Мбит/с за 1.1с мы должны получить 1Мб полезных данных и 100кб заполнителя
      */
     #[test]
-    #[serial]
+    #[inline(never)]
     fn filler_attach_and_fill() {
         initialize_logger();
         info!("FILLER_ATTACH_AND_FILL");
-        const BUF_SIZE: usize = 12_000;
+        const BUF_SIZE: usize = ONE_PACKET_MAX_SIZE;
         const PACKETS_COUNT: usize = 50;
         const HALF_SECOND_MS: usize = 500;
         const DELAY_MS:usize = HALF_SECOND_MS /PACKETS_COUNT;
@@ -334,6 +334,7 @@ mod tests {
             for _i in 0..PACKETS_COUNT {
                 trace!(r"-->  {} мс. {ONE_PACKET_SIZE}", start.elapsed().as_millis());
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
+                sleep(Duration::from_millis(DELAY_MS as u64));
             }
 
             info!("AWAITING HALF SECOND");
@@ -476,11 +477,10 @@ mod tests {
     fn one_gb_test() {
         initialize_logger();
         info!("1GB_TEST");
-        const BUF_SIZE: usize = 30_000;
         let target_speed: usize = to_native_speed(1024);
 
         //размер пакета примерно 10_000
-        let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
+        let mut buf: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
 
         let TestStreams {
             mut vpn_stream,
