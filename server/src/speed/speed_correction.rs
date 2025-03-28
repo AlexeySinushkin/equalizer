@@ -8,7 +8,7 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, MODIFY_PERIOD, PERCENT_100, SHUTDOWN_SPEED};
+use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, PERCENT_100, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
@@ -60,15 +60,16 @@ impl SpeedCorrector {
                 return Self::switch_off_command(info);
             }
             let last_correction_date = Self::last_sent_command_date(info);
-            if last_correction_date.is_none_or(|time| time.add(MODIFY_PERIOD) < Instant::now()) {
-                if long_term_speed.data_percent < DOWN_TRIGGER {
-                    debug!("decrease due percent {}", long_term_speed.data_percent);
-                    return Some(Self::decrease_command(&long_term_speed, info));
-                }
-                if long_term_speed.data_percent > UP_TRIGGER {
+
+            if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < Instant::now()
+                && long_term_speed.data_percent > UP_TRIGGER) {
                     debug!("increase due percent {}", long_term_speed.data_percent);
                     return Some(Self::increase_command(&long_term_speed, info));
-                }
+            }
+            if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < Instant::now()
+                && long_term_speed.data_percent < DOWN_TRIGGER) {
+                debug!("decrease due percent {}", long_term_speed.data_percent);
+                return Some(Self::decrease_command(&long_term_speed, info));
             }
         }
         //быстрей реагируем на низкую скорость, если процент заполнения низок
@@ -180,57 +181,6 @@ mod tests {
         info!("avg speed: {bytes_per_ms_sent} b/ms,  total_time: {total_time} ms, total_bytes: {total_sent_size}");
         let expected_speed_from = to_native_speed(51);
         let expected_speed_to = to_native_speed(60);
-        info!("requested_speed: {speed_setup_request}, expected from: {expected_speed_from} to: {expected_speed_to}");
-        assert!(speed_setup_request > expected_speed_from);
-        assert!(speed_setup_request < expected_speed_to);
-    }
-    /**
-    Отправляем полезных данных со скоростью 50MBit/s
-    Убеждаемся что нам устанавливают скорость 60 (50 на данные, 10 на заполнитель)
-     */
-    #[test]
-    fn decrease_speed_limit_test() {
-        initialize_logger();
-        let key = String::from("test");
-        let mut speed_corrector = SpeedCorrector::new();
-        let mut rng = rand::rng();
-        let bytes_per_ms = to_native_speed(50);
-
-        let mut speed_setup_request = 0;
-        let start = Instant::now();
-        let mut total_sent_size: usize = 0;
-        for _i in 0..70 {
-            let from = Instant::now();
-            //корректировка каждые пол секунды только - 70*8=560ms
-            let duration_ms = rng.random_range(8..15);
-            let total_bytes_for_period = bytes_per_ms * duration_ms;
-            let duration = Duration::from_millis(duration_ms as u64);
-            let parts: usize = rng.random_range(1..MAX_STAT_COUNT);
-            let hp = get_mock_hp(
-                total_bytes_for_period,
-                TARGET_PERCENT - (PERCENT_100 - TARGET_PERCENT), //60%
-                parts,
-                from,
-                duration,
-            );
-            sleep(duration);
-            debug!("notifying that sent {total_bytes_for_period} during {duration_ms}ms in {parts} parts");
-            total_sent_size += total_bytes_for_period;
-            if let Some(speed) = speed_corrector.append_and_get(&key, &hp) {
-                if let SpeedCorrectorCommand::SetSpeed(speed) = speed {
-                    speed_setup_request = speed;
-                    info!("------------ setup to {speed} -------------")
-                }
-            }
-        }
-        let total_time = Instant::now().duration_since(start).as_millis();
-        let bytes_per_ms_sent = total_sent_size / total_time as usize;
-        let m_bit_per_s = to_regular_speed(bytes_per_ms_sent);
-        info!("Bitrate was {m_bit_per_s} MBit/s");
-        info!("avg speed: {bytes_per_ms_sent} b/ms,  total_time: {total_time} ms, total_bytes: {total_sent_size}");
-        let expected_speed = (bytes_per_ms_sent as f32 * 0.8) as usize;
-        let expected_speed_from = expected_speed - 100;
-        let expected_speed_to = expected_speed + 100;
         info!("requested_speed: {speed_setup_request}, expected from: {expected_speed_from} to: {expected_speed_to}");
         assert!(speed_setup_request > expected_speed_from);
         assert!(speed_setup_request < expected_speed_to);

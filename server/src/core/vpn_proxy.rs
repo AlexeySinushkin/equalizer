@@ -17,6 +17,7 @@ const BURNOUT_DELAY: Duration = Duration::from_micros(500);
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
     cr_state: Receiver<ProxyState>,
+    ct_stop: Sender<bool>, //для остановки вторичного потока
     join_handle_stc: JoinHandle<()>,
     join_handle_cts: JoinHandle<()>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
@@ -49,7 +50,7 @@ struct ThreadWorkingSet {
     key: String,
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
-    ct_stop: Sender<bool>,
+    ct_stop: Sender<bool>, //для остановки вторичного потока
     data_read: Box<dyn DataStream>,
     data_write: Box<dyn DataStream>,
     filler_write: Box<dyn DataStream>,
@@ -70,7 +71,7 @@ impl VpnProxy {
             key: key.clone(),
             cr_command,
             ct_state,
-            ct_stop,
+            ct_stop: ct_stop.clone(),
             free_mode: true,
             data_read: pair.up_stream_read,
             data_write: pair.client_stream_write,
@@ -109,6 +110,7 @@ impl VpnProxy {
         Self {
             ct_command,
             cr_state,
+            ct_stop,
             join_handle_stc,
             join_handle_cts,
             key: key.clone(),
@@ -122,6 +124,9 @@ impl Drop for VpnProxy {
             self.join_handle_stc.is_finished(),
             self.join_handle_stc.thread().id(),
             self.join_handle_cts.is_finished());
+        if !self.join_handle_cts.is_finished() {
+            self.ct_stop.send(true).ok();
+        }
     }
 }
 
