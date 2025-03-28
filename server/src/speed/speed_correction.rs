@@ -196,7 +196,7 @@ mod tests {
         let mut speed_corrector = SpeedCorrector::new();
         let mut rng = rand::rng();
         let high_speed = to_native_speed(5);
-        let low_speed = to_native_speed(2);
+        let low_speed = to_native_speed(1);
         info!("high_speed: {high_speed}, low_speed: {low_speed}, shutdown_speed: {SHUTDOWN_SPEED}");
 
         let mut speed_setup_request = 0;

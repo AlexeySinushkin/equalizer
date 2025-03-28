@@ -125,7 +125,7 @@ impl Drop for VpnProxy {
             self.join_handle_stc.thread().id(),
             self.join_handle_cts.is_finished());
         if !self.join_handle_cts.is_finished() {
-            self.ct_stop.send(true).ok();
+            let _ = self.ct_stop.send(true);
         }
     }
 }

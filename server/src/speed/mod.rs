@@ -10,7 +10,7 @@ mod speed_calculation;
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 
 //скорость ниже которой мы отключаем филлер (не до жиру - быть бы живу)
-pub(crate) const SHUTDOWN_SPEED : usize = 300 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
+pub(crate) const SHUTDOWN_SPEED : usize = 50 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
 pub const M_COND: usize = (1024 * 1024 / 10) / 1000;//TODO move
 pub const TO_MB: usize = 1024 * 1024; //TODO move
 pub const TO_KB: usize = 1024;
@@ -19,7 +19,7 @@ pub(crate) const LONG_TERM: Duration = Duration::from_secs(5);
 //pub(crate) const SHORT_TERM: Duration = Duration::from_secs(2);
 //меняем скорость не чаще этого периода
 pub(crate) const INCREASE_SPEED_PERIOD: Duration = Duration::from_millis(500);
-pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(5);
+pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(10);
 
 //TODO move
 /*
