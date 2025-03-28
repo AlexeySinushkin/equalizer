@@ -67,8 +67,7 @@ impl CommonDataStream {
     }
     pub fn write_as_packet(&self, packet_type: u8, buf: &[u8]) -> Result<(), Error> {
         let stream = &mut *self.client_stream.borrow_mut();
-        let mut tmp_buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
-        write_packet(buf, packet_type, &mut tmp_buf, stream)
+        write_packet(buf, packet_type, stream)
     }
     pub fn read_packet(&self, target_type: u8, redirect_type: u8, dst: &mut [u8]) -> Result<usize, Error> {
         //Если в методе read пришел чужой пакет - перенаправляем его получателю

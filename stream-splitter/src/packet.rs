@@ -53,18 +53,17 @@ impl QueuedPacket {
 }
 
 pub fn write_packet(buf: &[u8], packet_type: u8,
-                    pre_alloc_buf: &mut [u8], // Pre allocated fixed-size buffer
                     stream: &mut TcpStream) -> Result<(), Error> {
     let size = buf.len();
     let head_buf = create_packet_header(packet_type, size);
     let total_size = HEADER_SIZE + size;
-    // Copy header and data into preallocated buffer
-    pre_alloc_buf[..HEADER_SIZE].copy_from_slice(&head_buf);
-    pre_alloc_buf[HEADER_SIZE..total_size].copy_from_slice(buf);
+    let mut tmp_buf: [u8; MAX_PACKET_SIZE] = [0; MAX_PACKET_SIZE];
+    tmp_buf[..HEADER_SIZE].copy_from_slice(&head_buf);
+    tmp_buf[HEADER_SIZE..total_size].copy_from_slice(buf);
 
     // Send the full packet at once
     stream
-        .write_all(&pre_alloc_buf[..total_size])
+        .write_all(&tmp_buf[..total_size])
         .context("Write full packet in write_packet")?;
     Ok(())
 }
