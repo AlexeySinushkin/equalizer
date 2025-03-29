@@ -17,11 +17,10 @@ enum PacketType {
 struct SentPacketType {
     packet: SentPacket,
     packet_type: PacketType,
-    target_speed: usize
 }
 
 impl SentPacketType {
-    fn new_data(size: usize, target_speed: usize) -> SentPacketType {
+    fn new_data(size: usize) -> SentPacketType {
         let packet = SentPacket {
             sent_date: Instant::now(),
             sent_size: size,
@@ -30,10 +29,9 @@ impl SentPacketType {
         Self {
             packet,
             packet_type,
-            target_speed,
         }
     }
-    fn new_filler(size: usize, target_speed: usize) -> SentPacketType {
+    fn new_filler(size: usize) -> SentPacketType {
         let packet = SentPacket {
             sent_date: Instant::now(),
             sent_size: size,
@@ -42,7 +40,6 @@ impl SentPacketType {
         Self {
             packet,
             packet_type,
-            target_speed
         }
     }
     //старше = было создан раньше этого времени
@@ -74,11 +71,11 @@ impl Filler {
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
-        self.queue.push(SentPacketType::new_data(amount, self.speed));
+        self.queue.push(SentPacketType::new_data(amount));
     }
 
     pub fn filler_was_sent(&mut self, amount: usize) {
-        self.queue.push(SentPacketType::new_filler(amount, self.speed));
+        self.queue.push(SentPacketType::new_filler(amount));
     }
 
     pub fn clean_almost_full(&mut self) -> Option<HotPotatoInfo> {
@@ -112,11 +109,10 @@ impl Filler {
         let now = Instant::now();
         let old_threshold = now.sub(OLD_AGE);
         let mut result = HotPotatoInfo::default();
-        let mut avg_speed = 0;
+
         while let Some(pack) = self.queue.first() {
             if pack.is_older(&old_threshold) {
                 let pack = self.queue.remove(0);
-                avg_speed += pack.target_speed;
                 match pack.packet_type {
                     PacketType::Data => {
                         result.data_packets[result.data_count] = Some(pack.packet);
@@ -134,12 +130,6 @@ impl Filler {
                 break;
             }
         }
-        let total_count = result.filler_count + result.data_count;
-        result.target_speed = if total_count > 0 {
-            Some(avg_speed/(total_count))
-        } else{
-            None
-        };
         result
     }
 
