@@ -3,7 +3,7 @@ use std::ops::Sub;
 use std::time::Instant;
 use log::warn;
 use crate::objects::HotPotatoInfo;
-use crate::speed::{Info, TimeSpanSentDataInfo, HISTORY_HOLD_PERIOD, LONG_TERM};
+use crate::speed::{Info, TimeSpanSentDataInfo, HISTORY_HOLD_PERIOD};
 
 pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
     let now = Instant::now();
@@ -55,7 +55,7 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
 
 pub fn clear_old_data(right_time: Instant, info: &mut Info) {
     //удаляем данные старше 5 секунд
-    let old_threshold = right_time.sub(LONG_TERM);
+    let old_threshold = right_time.sub(HISTORY_HOLD_PERIOD);
     while let Some(first) = info.sent_data.first() {
         if first.from < old_threshold {
             info.sent_data.remove(0);
