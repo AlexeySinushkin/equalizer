@@ -114,7 +114,7 @@ impl SpeedCorrector {
     fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
         let delta_percent = current_speed.data_percent - TARGET_PERCENT;
         //новая увеличенная скорость основанная на данных за последние пол секунды
-        let mut new_speed = if info.last_speed.is_none() {
+        let new_speed = if info.last_speed.is_none() {
             SHUTDOWN_SPEED + 10
         }else {
             current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100)
@@ -122,9 +122,9 @@ impl SpeedCorrector {
         //предыдущая скорость
         if let Some(prev_speed) = info.last_speed {
             if new_speed < prev_speed {
-                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, увеличиваем относительно предыдущей");
-                new_speed = prev_speed + prev_speed * delta_percent/ PERCENT_100;
-                return Some(Self::append_speed_history(info, new_speed));
+                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, но процентное соотношение требует повысить скорость");
+                Self::append_speed_history(info, prev_speed);
+                return None;
             }
         }
         Some(Self::append_speed_history(info, new_speed))

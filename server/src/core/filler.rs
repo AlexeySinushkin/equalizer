@@ -48,7 +48,7 @@ impl SentPacketType {
     }
 
     //моложе - был создан позже этого времени
-    fn _is_younger(&self, time: &Instant) -> bool {
+    fn is_younger(&self, time: &Instant) -> bool {
         return &self.packet.sent_date > time;
     }
 }
@@ -135,7 +135,10 @@ impl Filler {
 
     pub fn get_available_space(&self) -> usize {
         if let Some(last) = self.queue.last() {
-            let space = self.get_space(&last.packet);
+            let mut space = self.get_space(&last.packet);
+            if self.is_speed_up_required() {
+                space = space + space/2;
+            }
             if space > ONE_PACKET_MAX_SIZE {
                 return ONE_PACKET_MAX_SIZE;
             }
@@ -143,6 +146,28 @@ impl Filler {
         }
         ONE_PACKET_MAX_SIZE
     }
+
+    fn is_speed_up_required(&self) -> bool {
+        let old_threshold = Instant::now().sub(OLD_AGE);
+        let mut data_sent_amount = 0;
+        let mut filler_sent_amount = 0;
+        for pack in &self.queue {
+            if pack.is_younger(&old_threshold) {
+                match pack.packet_type {
+                    PacketType::Data => {
+                        data_sent_amount += pack.packet.sent_size;
+                    },
+                    PacketType::Filler => {
+                        filler_sent_amount += pack.packet.sent_size;
+                    }
+
+                }
+            }
+        }
+        //количество полезных данных больше 80% за последние 100мс
+        filler_sent_amount == 0 || data_sent_amount / filler_sent_amount > 5
+    }
+
     /*
         Подсчитываем сколько надо доотправить для поддержания скорости
         S = v*t, S = количество байт
