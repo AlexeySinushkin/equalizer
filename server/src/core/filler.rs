@@ -135,7 +135,11 @@ impl Filler {
 
     pub fn get_available_space(&self) -> usize {
         if let Some(last) = self.queue.last() {
-            return self.get_space(&last.packet);
+            let space = self.get_space(&last.packet);
+            if space > ONE_PACKET_MAX_SIZE {
+                return ONE_PACKET_MAX_SIZE;
+            }
+            return space;
         }
         ONE_PACKET_MAX_SIZE
     }
@@ -148,10 +152,8 @@ impl Filler {
             let last = last.packet;
             let bytes_to_fill = self.get_space(&last);
             if bytes_to_fill > MIN_BYTES_TO_FILL {
-                if bytes_to_fill > ONE_PACKET_MAX_SIZE {
-                    return Some(Packet::new_packet(ONE_PACKET_MAX_SIZE));
-                }
-                return Some(Packet::new_packet(bytes_to_fill));
+                //не отправляем большие пакеты заполнителя - не забиваем канал
+                return Some(Packet::new_packet(MIN_BYTES_TO_FILL));
             }
         }
         None

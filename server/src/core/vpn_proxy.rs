@@ -146,7 +146,7 @@ impl ThreadWorkingSet {
         //если есть место
         let available_space = filler.get_available_space();
         if available_space > A_FEW_SPACE {
-            let vpn_incoming_data_size = self.up_read.read(&mut self.buf[..])?;
+            let vpn_incoming_data_size = self.up_read.read(&mut self.buf[..available_space])?;
             if vpn_incoming_data_size > 0  {
                 trace!("=>> {}", vpn_incoming_data_size);
                 self.down_write.write_all(&self.buf[..vpn_incoming_data_size])?;
