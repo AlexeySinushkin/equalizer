@@ -45,13 +45,8 @@ impl SpeedCorrector {
         }
         let info = self.collected_info.get_mut(key).unwrap();
         append_new_data(hp, info);
+        clear_old_data(Instant::now(), info);
 
-        if let Some(last_info) = info.sent_data.last() {
-            let right_time = last_info.from.add(last_info.time_span);
-            clear_old_data(right_time, info);
-        } else {
-            clear_old_data(Instant::now(), info);
-        }
 
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             let calculated_speed = long_term_speed.speed;

@@ -82,8 +82,6 @@ struct SetupSpeedHistory {
 #[allow(dead_code)]
 struct TimeSpanSentDataInfo {
     from: Instant,
-    time_span: Duration,
-    target_speed: Option<usize>,
     data_size: usize,
     filler_size: usize,
 }

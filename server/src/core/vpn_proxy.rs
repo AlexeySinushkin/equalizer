@@ -3,7 +3,7 @@ use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
 use crate::objects::{ProxyState, RuntimeCommand};
 use crate::speed::{SpeedCorrectorCommand, SHUTDOWN_SPEED};
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
 use std::sync::mpsc::{channel, Receiver, SendError, Sender, TryRecvError};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -136,6 +136,7 @@ impl ThreadWorkingSet {
         filler: &mut Filler,
     ) -> Result<(), Error> {
         let mut some_work = false;
+        let start = Instant::now();
         let size = self.down_read.read(&mut self.buf[..])?;
         if size > 0 {
             //перенаправляем его VPN серверу
@@ -181,8 +182,13 @@ impl ThreadWorkingSet {
                 }
             }
         }
+
         if !some_work {
             sleep(BURNOUT_DELAY);
+        }
+        let mills =  (Instant::now() - start).as_millis();
+        if mills > 5 {
+            warn!("Слишком долго отправляли/получали {mills}");
         }
         Ok(())
     }
