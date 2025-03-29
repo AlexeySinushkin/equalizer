@@ -38,16 +38,9 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
         false => 0,
     };
 
-    //уточняем хвост очереди
-    if let Some(last_info) = info.sent_data.last_mut() {
-        last_info.time_span = min_instant.sub(last_info.from);
-    };
 
     info.sent_data.push(TimeSpanSentDataInfo {
         from: min_instant,
-        //примерное время
-        time_span: max_instant.sub(min_instant),
-        target_speed: hp.target_speed,
         data_size,
         filler_size,
     });
@@ -63,16 +56,16 @@ pub fn clear_old_data(right_time: Instant, info: &mut Info) {
             break;
         }
     }
-    if !info.speed_setup.is_empty() {
+    if !info.speed_history.is_empty() {
         let old_threshold = right_time.sub(HISTORY_HOLD_PERIOD);
-        while let Some(first) = info.speed_setup.first() {
+        while let Some(first) = info.speed_history.first() {
             if first.setup_time < old_threshold {
-                info.speed_setup.remove(0);
+                info.speed_history.remove(0);
             } else {
                 break;
             }
         }
-        if info.speed_setup.is_empty(){
+        if info.speed_history.is_empty(){
             warn!("Очередь установки скорости пуста!")
         }
     }

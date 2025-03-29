@@ -45,13 +45,8 @@ impl SpeedCorrector {
         }
         let info = self.collected_info.get_mut(key).unwrap();
         append_new_data(hp, info);
+        clear_old_data(Instant::now(), info);
 
-        if let Some(last_info) = info.sent_data.last() {
-            let right_time = last_info.from.add(last_info.time_span);
-            clear_old_data(right_time, info);
-        } else {
-            clear_old_data(Instant::now(), info);
-        }
 
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             let calculated_speed = long_term_speed.speed;
@@ -80,13 +75,13 @@ impl SpeedCorrector {
     }
 
     fn last_sent_command_date(info: &mut Info) -> Option<Instant> {
-        if let Some(last_command) = info.speed_setup.last() {
+        if let Some(last_command) = info.speed_history.last() {
             return Some(last_command.setup_time);
         }
         None
     }
     fn last_sent_command_speed(info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        if let Some(last_command) = info.speed_setup.last() {
+        if let Some(last_command) = info.speed_history.last() {
             return Some(last_command.command);
         }
         None
@@ -94,13 +89,9 @@ impl SpeedCorrector {
 
     //#[inline(never)]
     fn switch_off_command(info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        if let Some(last_command) = info.speed_setup.last() {
+        if let Some(last_command) = info.speed_history.last() {
             if last_command.command != SpeedCorrectorCommand::SwitchOff {
-                info.speed_setup.push(SetupSpeedHistory {
-                    command: SpeedCorrectorCommand::SwitchOff,
-                    setup_time: Instant::now(),
-                });
-                return Some(SpeedCorrectorCommand::SwitchOff);
+                return Some(Self::append_speed_history_switch_off(info));
             }
         }
         None
@@ -118,41 +109,43 @@ impl SpeedCorrector {
                 _=>{}
             }
         }
-        let result = SpeedCorrectorCommand::SetSpeed(
-            new_speed,
-        );
-        info.speed_setup.push(SetupSpeedHistory {
-            command: result,
-            setup_time: Instant::now(),
-        });
-        result
+        Self::append_speed_history(info, new_speed)
     }
     fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
         let delta_percent = current_speed.data_percent - TARGET_PERCENT;
         //новая увеличенная скорость основанная на данных за последние пол секунды
-        let new_speed = current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100);
+        let mut new_speed = if info.last_speed.is_none() {
+            SHUTDOWN_SPEED + 10
+        }else {
+            current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100)
+        };
         //предыдущая скорость
-        if let Some(prev_speed) = Self::last_sent_command_speed(info) {
-            match prev_speed {
-                SpeedCorrectorCommand::SetSpeed(prev_speed) => {
-                    if new_speed < prev_speed {
-                        debug!("Держим скорость {prev_speed}, хотя по подсчетам надо установить {new_speed}");
-                        info.speed_setup.push(SetupSpeedHistory {
-                            command: SpeedCorrectorCommand::SetSpeed(prev_speed),
-                            setup_time: Instant::now(),
-                        });
-                        return None;
-                    }
-                },
-                _=>{}
+        if let Some(prev_speed) = info.last_speed {
+            if new_speed < prev_speed {
+                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, увеличиваем относительно предыдущей");
+                new_speed = prev_speed + prev_speed * delta_percent/ PERCENT_100;
+                return Some(Self::append_speed_history(info, new_speed));
             }
         }
-        let result = SpeedCorrectorCommand::SetSpeed(new_speed);
-        info.speed_setup.push(SetupSpeedHistory {
-            command: result,
+        Some(Self::append_speed_history(info, new_speed))
+    }
+    fn append_speed_history(info: &mut Info, speed: usize) -> SpeedCorrectorCommand {
+        let command = SpeedCorrectorCommand::SetSpeed(speed);
+        info.speed_history.push(SetupSpeedHistory {
+            command: command.clone(),
             setup_time: Instant::now(),
         });
-        Some(result)
+        info.last_speed = Some(speed);
+        command
+    }
+
+    fn append_speed_history_switch_off(info: &mut Info) -> SpeedCorrectorCommand {
+        info.speed_history.push(SetupSpeedHistory {
+            command: SpeedCorrectorCommand::SwitchOff,
+            setup_time: Instant::now(),
+        });
+        info.last_speed = None;
+        SpeedCorrectorCommand::SwitchOff
     }
 }
 
