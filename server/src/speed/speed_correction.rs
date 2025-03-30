@@ -8,11 +8,11 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, PERCENT_100, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD};
+use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD,  SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
-use log::{debug, info};
+use log::{debug};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -23,6 +23,9 @@ const FREE_PLAY: usize = 2;
 const DOWN_TRIGGER: usize = TARGET_PERCENT - FREE_PLAY;
 //Если процент полезных данных выше этого значения - увеличиваем скорость (скорость недостаточна для компенсации всплеска)
 const UP_TRIGGER: usize = TARGET_PERCENT + FREE_PLAY;
+const UP_ACCELERATION: usize = 100;
+const DOWN_ACCELERATION: usize = 50;
+
 
 impl SpeedCorrector {
     pub fn new() -> SpeedCorrector {
@@ -57,7 +60,7 @@ impl SpeedCorrector {
             if calculated_speed < SHUTDOWN_SPEED {
                 return Self::switch_off_command(info);
             }
-            let last_correction_date = Self::last_sent_command_date(info);
+            let last_correction_date = info.last_command_date;
             let now = Instant::now();
             if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent > UP_TRIGGER {
@@ -67,7 +70,7 @@ impl SpeedCorrector {
             if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent < DOWN_TRIGGER {
                 debug!("decrease due percent {} #{new_id}", long_term_speed.data_percent);
-                return Some(Self::decrease_command(&long_term_speed, info));
+                return Self::decrease_command(&long_term_speed, info);
             }
         }
         None
@@ -77,50 +80,29 @@ impl SpeedCorrector {
         let _ = self.collected_info.remove(&key.clone());
     }
 
-    fn last_sent_command_date(info: &mut Info) -> Option<Instant> {
-        if let Some(last_command) = info.speed_history.last() {
-            return Some(last_command.setup_time);
-        }
-        None
-    }
-    fn last_sent_command_speed(info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        if let Some(last_command) = info.speed_history.last() {
-            return Some(last_command.command);
-        }
-        None
-    }
+
 
     //#[inline(never)]
     fn switch_off_command(info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        if let Some(last_command) = info.speed_history.last() {
-            if last_command.command != SpeedCorrectorCommand::SwitchOff {
-                return Some(Self::append_speed_history_switch_off(info));
-            }
+        if info.last_speed.is_some() {
+            return Some(Self::append_speed_history_switch_off(info));
         }
         None
     }
 
-    fn decrease_command(current_speed: &SpeedForPeriod, info: &mut Info) -> SpeedCorrectorCommand {
-        let mut new_speed = current_speed.speed - 10;
-        //предыдущая скорость
-        if let Some(prev_speed) = Self::last_sent_command_speed(info) {
-            match prev_speed {
-                SpeedCorrectorCommand::SetSpeed(prev_speed) => {
-                    new_speed = prev_speed - 10;
-                    debug!("Понижаем скорость {new_speed}, основываясь на предыдущем значении {prev_speed}");
-                },
-                _=>{}
-            }
+    fn decrease_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
+        if current_speed.speed - DOWN_ACCELERATION < SHUTDOWN_SPEED{
+            return Self::switch_off_command(info);
         }
-        Self::append_speed_history(info, new_speed)
+        let new_speed  = current_speed.speed - DOWN_ACCELERATION;
+        Some(Self::append_speed_history(info, new_speed))
     }
     fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        let delta_percent = current_speed.data_percent - TARGET_PERCENT;
         //новая увеличенная скорость основанная на данных за последние пол секунды
         let new_speed = if info.last_speed.is_none() {
-            SHUTDOWN_SPEED + 100
+            SHUTDOWN_SPEED + UP_ACCELERATION
         }else {
-            current_speed.speed + 100
+            current_speed.speed + UP_ACCELERATION
         };
         //предыдущая скорость
         if let Some(prev_speed) = info.last_speed {
@@ -134,19 +116,12 @@ impl SpeedCorrector {
     }
     fn append_speed_history(info: &mut Info, speed: usize) -> SpeedCorrectorCommand {
         let command = SpeedCorrectorCommand::SetSpeed(speed);
-        info.speed_history.push(SetupSpeedHistory {
-            command: command.clone(),
-            setup_time: Instant::now(),
-        });
         info.last_speed = Some(speed);
+        info.last_command_date = Some(Instant::now());
         command
     }
 
     fn append_speed_history_switch_off(info: &mut Info) -> SpeedCorrectorCommand {
-        info.speed_history.push(SetupSpeedHistory {
-            command: SpeedCorrectorCommand::SwitchOff,
-            setup_time: Instant::now(),
-        });
         info.last_speed = None;
         SpeedCorrectorCommand::SwitchOff
     }
@@ -156,7 +131,7 @@ impl SpeedCorrector {
 mod tests {
     use crate::objects::{HotPotatoInfo, SentPacket, MAX_STAT_COUNT};
     use crate::speed::speed_correction::{FREE_PLAY, PERCENT_100, TARGET_PERCENT};
-    use crate::speed::{to_native_speed, to_regular_speed, SpeedCorrector, SpeedCorrectorCommand, SHUTDOWN_SPEED};
+    use crate::speed::{to_native_speed, to_regular_speed, SpeedCorrector, SpeedCorrectorCommand, PERCENT_100, SHUTDOWN_SPEED};
     use crate::tests::test_init::initialize_logger;
     use log::{debug, info};
     use rand::{Rng};

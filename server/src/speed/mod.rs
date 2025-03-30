@@ -22,7 +22,7 @@ pub(crate) const LONG_TERM: Duration = Duration::from_secs(5);
 //меняем скорость не чаще этого периода
 pub(crate) const INCREASE_SPEED_PERIOD: Duration = Duration::from_millis(500);
 pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(10);
-pub(crate) const HISTORY_HOLD_PERIOD: Duration = Duration::from_secs(11);
+//pub(crate) const HISTORY_HOLD_PERIOD: Duration = Duration::from_secs(11);
 
 //TODO move
 /*
@@ -75,9 +75,9 @@ struct SpeedForPeriod {
 #[derive(Default)]
 struct Info {
     sent_data: Vec<TimeSpanSentDataInfo>,
-    speed_history: Vec<SetupSpeedHistory>,
     //последняя установленная скорость
     last_speed: Option<usize>,
+    last_command_date: Option<Instant>,
     sequence_data: u64,
     speed_logging: Option<SpeedLogging>,
 }
@@ -104,10 +104,7 @@ struct SpeedLogging {
     start_time: Instant,
 }
 
-struct SetupSpeedHistory {
-    setup_time: Instant,
-    command: SpeedCorrectorCommand,
-}
+
 #[allow(dead_code)]
 struct TimeSpanSentDataInfo {
     id: u64,
