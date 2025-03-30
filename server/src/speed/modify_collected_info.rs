@@ -1,9 +1,10 @@
 use std::cmp::{max, min};
 use std::ops::Sub;
 use std::time::Instant;
-use log::warn;
+use log::{warn};
 use crate::objects::HotPotatoInfo;
 use crate::speed::{Info, TimeSpanSentDataInfo, HISTORY_HOLD_PERIOD, LONG_TERM};
+
 
 pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
     let now = Instant::now();
@@ -38,12 +39,18 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
         false => 0,
     };
 
-
-    info.sent_data.push(TimeSpanSentDataInfo {
+    let data = TimeSpanSentDataInfo {
+        id: info.next_sequence_data(),
         from: min_instant,
         data_size,
         filler_size,
-    });
+    };
+
+    if let Some(log) = info.speed_logging.as_mut() {
+        log.append_new_data_log(&data);
+    }
+
+    info.sent_data.push(data);
 }
 
 pub fn clear_old_data(right_time: Instant, info: &mut Info) {
@@ -51,7 +58,10 @@ pub fn clear_old_data(right_time: Instant, info: &mut Info) {
     let old_threshold = right_time.sub(LONG_TERM);
     while let Some(first) = info.sent_data.first() {
         if first.from < old_threshold {
-            info.sent_data.remove(0);
+            let data = info.sent_data.remove(0);
+            if let Some(log) = info.speed_logging.as_mut() {
+                log.clear_old_data_log(&data);
+            }
         } else {
             break;
         }

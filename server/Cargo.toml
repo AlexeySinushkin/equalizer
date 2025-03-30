@@ -11,6 +11,7 @@ debug = true
 log = "0.4"
 simplelog = "0.12.2"
 easy-error = "1.0.0"
+num-format = "0.4.4"
 # ln -sr ../stream-splitter stream-splitter
 # https://stackoverflow.com/questions/66951308/how-to-specify-the-path-to-a-dependency-located-in-my-home-directory-in-cargo-to
 splitter = { path = "../stream-splitter"}

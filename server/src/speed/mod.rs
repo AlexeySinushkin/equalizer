@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufWriter;
 use std::time::Instant;
 use std::time::Duration;
+use log::{log_enabled, Level};
 
 pub mod speed_correction;
 mod modify_collected_info;
 mod speed_calculation;
-
+mod packets_logging;
 //10 Мбит/с = 1МБ/с = 1048 байт/мс
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 
@@ -75,6 +78,30 @@ struct Info {
     speed_history: Vec<SetupSpeedHistory>,
     //последняя установленная скорость
     last_speed: Option<usize>,
+    sequence_data: u64,
+    speed_logging: Option<SpeedLogging>,
+}
+
+
+impl Info {
+    pub fn new() -> Self {
+        let speed_logging = if log_enabled!(Level::Debug) {
+            Some(SpeedLogging::new())
+        } else { None };
+        let mut info = Info::default();
+        info.speed_logging = speed_logging;
+        info
+    }
+    fn next_sequence_data(&mut self) -> u64 {
+        self.sequence_data += 1;
+        self.sequence_data
+    }
+}
+
+struct SpeedLogging {
+    packets_file: BufWriter<File>,
+    speed_file: BufWriter<File>,
+    start_time: Instant,
 }
 
 struct SetupSpeedHistory {
@@ -83,6 +110,7 @@ struct SetupSpeedHistory {
 }
 #[allow(dead_code)]
 struct TimeSpanSentDataInfo {
+    id: u64,
     from: Instant,
     data_size: usize,
     filler_size: usize,

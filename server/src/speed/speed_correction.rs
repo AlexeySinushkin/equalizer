@@ -41,7 +41,7 @@ impl SpeedCorrector {
         hp: &HotPotatoInfo,
     ) -> Option<SpeedCorrectorCommand> {
         if !self.collected_info.contains_key(key) {
-            self.collected_info.insert(key.clone(), Info::default());
+            self.collected_info.insert(key.clone(), Info::new());
         }
         let info = self.collected_info.get_mut(key).unwrap();
         append_new_data(hp, info);
@@ -49,6 +49,9 @@ impl SpeedCorrector {
 
 
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
+            if let Some(log) = info.speed_logging.as_mut() {
+                log.get_speed_log(LONG_TERM, &info.sent_data, &long_term_speed);
+            }
             let calculated_speed = long_term_speed.speed;
             //trace!("calculated speed {calculated_speed}");
             if calculated_speed < SHUTDOWN_SPEED {
