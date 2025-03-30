@@ -187,7 +187,7 @@ impl ThreadWorkingSet {
             sleep(BURNOUT_DELAY);
         }
         let mills =  (Instant::now() - start).as_millis();
-        if mills > 5 {
+        if mills > 15 {
             warn!("Слишком долго отправляли/получали {mills}");
         }
         Ok(())

@@ -12,7 +12,7 @@ use crate::speed::{Info, SetupSpeedHistory, SpeedCorrector, SpeedCorrectorComman
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
-use log::{debug};
+use log::{debug, info};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -118,9 +118,9 @@ impl SpeedCorrector {
         let delta_percent = current_speed.data_percent - TARGET_PERCENT;
         //новая увеличенная скорость основанная на данных за последние пол секунды
         let new_speed = if info.last_speed.is_none() {
-            SHUTDOWN_SPEED + 10
+            SHUTDOWN_SPEED + 100
         }else {
-            current_speed.speed + (current_speed.speed * delta_percent / PERCENT_100)
+            current_speed.speed + 100
         };
         //предыдущая скорость
         if let Some(prev_speed) = info.last_speed {
