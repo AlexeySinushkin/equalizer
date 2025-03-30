@@ -107,9 +107,8 @@ impl SpeedCorrector {
         //предыдущая скорость
         if let Some(prev_speed) = info.last_speed {
             if new_speed < prev_speed {
-                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, но процентное соотношение требует повысить скорость");
-                Self::append_speed_history(info, prev_speed);
-                return None;
+                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, (уперлись в пропускную способность)");
+                return Some(Self::append_speed_history(info, new_speed + UP_ACCELERATION/4))
             }
         }
         Some(Self::append_speed_history(info, new_speed))
