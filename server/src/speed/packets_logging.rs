@@ -24,14 +24,14 @@ impl SpeedLogging {
     }
 
     pub fn append_new_data_log(&mut self, data: &TimeSpanSentDataInfo) {
-        writeln!(self.packets_file, "----append {}", data.id).unwrap();
+        writeln!(self.packets_file, "----append #{}", data.id).unwrap();
         let duration_from_start = (data.from - self.start_time).as_millis();
         let duration_formatted = duration_from_start.to_formatted_string(&Locale::en);
         writeln!(self.packets_file, "data/filler {:06}/{:06} time {}, ", data.data_size, data.filler_size, duration_formatted).unwrap();
     }
 
     pub fn clear_old_data_log(&mut self, data: &TimeSpanSentDataInfo) {
-        writeln!(self.packets_file, "----remove {}", data.id).unwrap();
+        writeln!(self.packets_file, "----remove #{}", data.id).unwrap();
     }
 
     pub fn get_speed_log(&mut self, max_duration: Duration, sent_data: &Vec<TimeSpanSentDataInfo>, calculated_speed: &SpeedForPeriod) {
@@ -74,7 +74,7 @@ impl SpeedLogging {
         let speed = amount / mills;
         let data_percent = data_amount * PERCENT_100 / amount;
         writeln!(self.speed_file,
-        "---- {speed} ({}) from {left_id} to {right_id} amount {amount} mills {mills} percent {data_percent} ({})",
+        "---- {speed} ({}) from #{left_id} to #{right_id} amount {amount} mills {mills} percent {data_percent} ({})",
                  calculated_speed.speed, calculated_speed.data_percent).unwrap();
         writeln!(self.speed_file, "{}", packets).unwrap();
     }

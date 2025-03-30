@@ -6,7 +6,7 @@ use crate::objects::HotPotatoInfo;
 use crate::speed::{Info, TimeSpanSentDataInfo, HISTORY_HOLD_PERIOD, LONG_TERM};
 
 
-pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
+pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) -> u64 {
     let now = Instant::now();
     //самое раннее время отправки
     let mut min_instant = now;
@@ -49,8 +49,9 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) {
     if let Some(log) = info.speed_logging.as_mut() {
         log.append_new_data_log(&data);
     }
-
+    let new_id = data.id;
     info.sent_data.push(data);
+    new_id
 }
 
 pub fn clear_old_data(right_time: Instant, info: &mut Info) {
