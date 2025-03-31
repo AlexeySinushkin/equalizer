@@ -41,7 +41,7 @@ To run as service /absolute_path/equalizer 12010 1194 --service
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let service_mode: bool = args.len() > 3 && args.get(3).unwrap().eq("--service"); //TODO to use some lib
     if service_mode {
-        SimpleLogger::init(LevelFilter::Warn, Config::default()).expect("Логгер проинициализирован");
+        SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     }else{
         SimpleLogger::init(LevelFilter::Debug, Config::default()).expect("Логгер проинициализирован");
     }

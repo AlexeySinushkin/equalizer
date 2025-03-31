@@ -107,6 +107,15 @@ impl Orchestrator {
     fn check_new_connections(&mut self) -> bool {
         if let Ok(main_channel) = self.new_proxy_receiver.try_recv() {
             let proxy = VpnProxy::new(main_channel);
+            for i in 0..self.pairs.len() {
+                if let Some(exist_proxy) = self.pairs.get(i) {
+                    if proxy.get_key() == exist_proxy.get_key() {
+                        self.pairs.remove(i);
+                        info!("removed existing proxy {}", proxy.get_key());
+                        break;
+                    }
+                }
+            }
             self.pairs.push(Box::new(proxy));
             return true;
         }
