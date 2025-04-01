@@ -1,6 +1,7 @@
 use crate::speed::{SpeedForPeriod, TimeSpanSentDataInfo, PERCENT_100};
 use std::ops::Sub;
 use std::time::Duration;
+use log::debug;
 
 pub fn get_speed(
     max_duration: Duration,
@@ -8,6 +9,7 @@ pub fn get_speed(
 ) -> Option<SpeedForPeriod> {
     //должно быть как минимум 2 элемента в очереди, так как последний элемент недостаточно точный
     if sent_data.len() < 2 {
+        debug!("A few data for speed calculation");
         return None;
     }
     let right = sent_data.last().unwrap().from;
@@ -35,6 +37,7 @@ pub fn get_speed(
         0
     };
     if mills == 0 || amount == 0 {
+        debug!("mills {mills} amount {amount}");
         return None;
     }
     Some(SpeedForPeriod {

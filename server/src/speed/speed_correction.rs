@@ -66,12 +66,14 @@ impl SpeedCorrector {
                 && long_term_speed.data_percent > UP_TRIGGER {
                     debug!("increase due percent {} #{new_id}", long_term_speed.data_percent);
                     return Self::increase_command(&long_term_speed, info);
-            }
-            if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < now)
+            } else if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent < DOWN_TRIGGER {
                 debug!("decrease due percent {} #{new_id}", long_term_speed.data_percent);
                 return Self::decrease_command(&long_term_speed, info);
             }
+            //не удалось посчитать скорость, но мы ее уже ранее считали (большие задержки - отпускаем все)
+        } else if info.last_speed.is_some() {
+            return Self::switch_off_command(info);
         }
         None
     }
