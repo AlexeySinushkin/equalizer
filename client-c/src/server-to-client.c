@@ -37,11 +37,7 @@ enum ReadResult read_header(struct Pipe *pipe, struct Header *header)
     {
         //printf("Attempting to read from fd %d\n", pipe->src_fd);
         int from_server_bytes_read = read(pipe->src_fd, pipe->header_buf + pipe->offset, HEADER_SIZE - pipe->offset);        
-        if (from_server_bytes_read==0){
-            printf("read_header %d %d\n", from_server_bytes_read, errno);
-            return READ_ERROR;
-        }
-        if (from_server_bytes_read == -1) {
+        if (from_server_bytes_read <= 0) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 return READ_INCOMPLETE;  // Not an error, just need to retry later
             } else {
@@ -76,11 +72,7 @@ enum ReadResult read_packet(struct Pipe *pipe){
         while (pipe->offset < pipe->size)
         {
             int from_server_bytes_read = read(pipe->src_fd, pipe->body_buf + pipe->offset - HEADER_SIZE, pipe->size - pipe->offset);
-            if (from_server_bytes_read==0){
-                printf("read_packet %d %d\n", from_server_bytes_read, errno);
-                return READ_ERROR;
-            }
-            if (from_server_bytes_read == -1) {
+            if (from_server_bytes_read <= 0) {
                 if (errno == EWOULDBLOCK || errno == EAGAIN) {
                     //printf("Socket is not ready for reading, try again later.\n");
                     return EXIT_SUCCESS;  // Not an error, just need to retry later
