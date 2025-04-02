@@ -8,7 +8,7 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD,  SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD};
+use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
@@ -100,19 +100,20 @@ impl SpeedCorrector {
         Some(Self::append_speed_history(info, new_speed))
     }
     fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
+        //предыдущая запрошенная скорость
+        if let Some(prev_requested_speed) = info.last_speed {
+            if current_speed.speed < Self::minus_7p(prev_requested_speed) {
+                debug!("Текущая скорость {} ниже запрошенной {prev_requested_speed}, (уперлись в пропускную способность)",
+                        current_speed.speed);
+                return Some(Self::append_speed_history(info, current_speed.speed - UP_ACCELERATION/4))
+            }
+        }
         //новая увеличенная скорость основанная на данных за последние пол секунды
         let new_speed = if info.last_speed.is_none() {
             SHUTDOWN_SPEED + UP_ACCELERATION
         }else {
             current_speed.speed + UP_ACCELERATION
         };
-        //предыдущая скорость
-        if let Some(prev_speed) = info.last_speed {
-            if new_speed < prev_speed {
-                debug!("Посчитанная скорость {new_speed} ниже предыдущей {prev_speed}, (уперлись в пропускную способность)");
-                return Some(Self::append_speed_history(info, new_speed + UP_ACCELERATION/4))
-            }
-        }
         Some(Self::append_speed_history(info, new_speed))
     }
     fn append_speed_history(info: &mut Info, speed: usize) -> SpeedCorrectorCommand {
@@ -125,6 +126,10 @@ impl SpeedCorrector {
     fn append_speed_history_switch_off(info: &mut Info) -> SpeedCorrectorCommand {
         info.last_speed = None;
         SpeedCorrectorCommand::SwitchOff
+    }
+
+    fn minus_7p(value: usize) -> usize{
+        value * 93 / PERCENT_100
     }
 }
 
