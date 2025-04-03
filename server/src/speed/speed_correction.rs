@@ -47,9 +47,11 @@ impl SpeedCorrector {
             self.collected_info.insert(key.clone(), Info::new());
         }
         let info = self.collected_info.get_mut(key).unwrap();
+        let before_size = info.sent_data.len();
         let new_id = append_new_data(hp, info);
-        clear_old_data(Instant::now(), info);
-
+        clear_old_data(info);
+        let after_size = info.sent_data.len();
+        debug!("before_size: {}, after_size: {}", before_size, after_size);
 
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             if let Some(log) = info.speed_logging.as_mut() {

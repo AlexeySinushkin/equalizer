@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::BufWriter;
 use std::time::Instant;
@@ -74,7 +74,7 @@ struct SpeedForPeriod {
 }
 #[derive(Default)]
 struct Info {
-    sent_data: Vec<TimeSpanSentDataInfo>,
+    sent_data: VecDeque<TimeSpanSentDataInfo>,
     //последняя установленная скорость
     last_speed: Option<usize>,
     last_command_date: Option<Instant>,

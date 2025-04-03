@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use crate::speed::{SpeedForPeriod, TimeSpanSentDataInfo, PERCENT_100};
 use std::ops::Sub;
 use std::time::Duration;
@@ -5,14 +6,14 @@ use log::debug;
 
 pub fn get_speed(
     max_duration: Duration,
-    sent_data: &Vec<TimeSpanSentDataInfo>,
+    sent_data: &VecDeque<TimeSpanSentDataInfo>,
 ) -> Option<SpeedForPeriod> {
     //должно быть как минимум 2 элемента в очереди, так как последний элемент недостаточно точный
     if sent_data.len() < 2 {
-        debug!("A few data for speed calculation");
+        debug!("A few data for speed calculation {}", sent_data.len());
         return None;
     }
-    let right = sent_data.last().unwrap().from;
+    let right = sent_data.back().unwrap().from;
     let mut left = None;
     let from_threshold = right.sub(max_duration);
 
@@ -20,7 +21,7 @@ pub fn get_speed(
     let mut filler_amount: usize = 0;
 
     for sent_data in sent_data.iter() {
-        if sent_data.from >= from_threshold && sent_data.from < right {
+        if sent_data.from >= from_threshold && sent_data.from <= right {
             data_amount += sent_data.data_size;
             filler_amount += sent_data.filler_size;
             if left == None {

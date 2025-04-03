@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs::OpenOptions;
 use std::io::BufWriter;
 use std::io::Write;
@@ -34,13 +35,13 @@ impl SpeedLogging {
         writeln!(self.packets_file, "----remove #{}", data.id).unwrap();
     }
 
-    pub fn get_speed_log(&mut self, max_duration: Duration, sent_data: &Vec<TimeSpanSentDataInfo>, calculated_speed: &SpeedForPeriod) {
+    pub fn get_speed_log(&mut self, max_duration: Duration, sent_data: &VecDeque<TimeSpanSentDataInfo>, calculated_speed: &SpeedForPeriod) {
         //должно быть как минимум 2 элемента в очереди, так как последний элемент недостаточно точный
         if sent_data.len() < 2 {
             return;
         }
-        let right = sent_data.last().unwrap().from;
-        let right_id = sent_data.last().unwrap().id;
+        let right = sent_data.back().unwrap().from;
+        let right_id = sent_data.back().unwrap().id;
 
         let mut left = None;
         let mut left_id = 0;

@@ -33,7 +33,6 @@ mod tests {
     use log::{error, info, trace};
     use rand::Rng;
     use rand::rngs::ThreadRng;
-    use serial_test::serial;
     use splitter::client_side_split::{split_client_stream, squash, DataStreamFiller, DataStreamVpn};
     use crate::orchestrator::Orchestrator;
     use crate::statistic::{NoStatistic, SimpleStatisticCollector, StatisticCollector};
