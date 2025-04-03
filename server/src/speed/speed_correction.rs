@@ -105,7 +105,8 @@ impl SpeedCorrector {
             if current_speed.speed < Self::minus_7p(prev_requested_speed) {
                 debug!("Текущая скорость {} ниже запрошенной {prev_requested_speed}, (уперлись в пропускную способность)",
                         current_speed.speed);
-                return Some(Self::append_speed_history(info, current_speed.speed - UP_ACCELERATION/4))
+                Self::append_speed_history(info, prev_requested_speed);
+                return None;
             }
         }
         //новая увеличенная скорость основанная на данных за последние пол секунды
