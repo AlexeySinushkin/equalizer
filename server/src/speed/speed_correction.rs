@@ -138,7 +138,7 @@ impl SpeedCorrector {
 mod tests {
     use crate::objects::{HotPotatoInfo, SentPacket, MAX_STAT_COUNT};
     use crate::speed::speed_correction::{FREE_PLAY, PERCENT_100, TARGET_PERCENT};
-    use crate::speed::{to_native_speed, to_regular_speed, SpeedCorrector, SpeedCorrectorCommand, PERCENT_100, SHUTDOWN_SPEED};
+    use crate::speed::{to_native_speed, to_regular_speed, SpeedCorrector, SpeedCorrectorCommand, SHUTDOWN_SPEED};
     use crate::tests::test_init::initialize_logger;
     use log::{debug, info};
     use rand::{Rng};
@@ -201,14 +201,14 @@ mod tests {
         let mut speed_corrector = SpeedCorrector::new();
         let mut rng = rand::rng();
         let high_speed = to_native_speed(5);
-        let low_speed = to_native_speed(1);
+        let low_speed = SHUTDOWN_SPEED - 50;
         info!("high_speed: {high_speed}, low_speed: {low_speed}, shutdown_speed: {SHUTDOWN_SPEED}");
 
         let mut speed_setup_request = 0;
         let start = Instant::now();
         let mut total_sent_size: usize = 0;
         let mut switch_off = false;
-        for i in 0..200 {
+        for i in 0..1000 {
             let from = Instant::now();
             //корректировка каждые пол секунды только - 70*8=560ms
             let duration_ms = rng.random_range(8..15);

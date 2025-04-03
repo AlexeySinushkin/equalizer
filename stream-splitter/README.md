@@ -4,5 +4,9 @@
 Другой - для всего остального, в частности для отправки данных заполнения
 от сервера к клиенту
 
+# Precondition
+Потоки неблокирующие
+set_nonblocking(true)
+
 # testing
 `RUST_MIN_STACK=104857600 cargo test -- --nocapture`

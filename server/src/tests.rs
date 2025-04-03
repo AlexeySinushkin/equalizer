@@ -24,7 +24,8 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::ops::Deref;
     use std::rc::Rc;
-    use std::sync::mpsc;
+    use std::sync::{mpsc, Arc};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
     use std::thread::{sleep, JoinHandle};
@@ -98,7 +99,7 @@ mod tests {
     и другие данные ходят от сервера к клиенту
      */
     #[test]
-    #[serial]
+    //#[serial]
     fn all_received_test() {
         initialize_logger();
         info!("ALL_RECEIVED_TEST");
@@ -150,6 +151,7 @@ mod tests {
         ct_stop.send(true).unwrap();
         assert!(compare_result1);
         assert!(compare_result2);
+        info!("success")
     }
 
     fn client_side_write_and_read(stream: TcpStream, out_buf: &[u8], in_buf: &mut [u8], name: &str) -> TcpStream {
@@ -334,7 +336,6 @@ mod tests {
             for _i in 0..PACKETS_COUNT {
                 trace!(r"-->  {} мс. {ONE_PACKET_SIZE}", start.elapsed().as_millis());
                 vpn_stream.write_all(&value_data[..]).expect("Отправка полезных данных от прокси");
-                sleep(Duration::from_millis(DELAY_MS as u64));
             }
 
             info!("AWAITING HALF SECOND");
@@ -350,6 +351,8 @@ mod tests {
             return vpn_stream;
         }).unwrap();
 
+        orchestrator.send_command(&TEST_CLIENT_NAME.to_string(),
+                                  RuntimeCommand::SetSpeed(SpeedCorrectorCommand::SetSpeed(INITIAL_SPEED))).unwrap();
 
         let receive_time = Duration::from_millis(1100);
         rx.recv().unwrap();
@@ -357,9 +360,6 @@ mod tests {
         let start = Instant::now();
         let mut data_offset = 0;
         let mut filler_offset = 0;
-        orchestrator.send_command(&TEST_CLIENT_NAME.to_string(),
-                                  RuntimeCommand::SetSpeed(SpeedCorrectorCommand::SetSpeed(INITIAL_SPEED))).unwrap();
-
         loop {
             let data_read = client_data_stream.read(&mut buf[..]).unwrap();
             let filler_read = client_filler_stream.read(&mut buf[..]).unwrap();
@@ -369,11 +369,12 @@ mod tests {
                 info!("Прошло {}. Окончили ожидание.", start.elapsed().as_millis());
                 break;
             }
-
             if data_read > 0 || filler_read > 0 {
                 trace!(r"<-- {} мс. {data_offset} {filler_offset}", start.elapsed().as_millis());
             }
             sleep(Duration::from_millis(DELAY_MS as u64));
+            orchestrator.send_command(&TEST_CLIENT_NAME.to_string(),
+                                      RuntimeCommand::SetSpeed(SpeedCorrectorCommand::SetSpeed(INITIAL_SPEED))).unwrap();
         }
         info!("Получено поезных данных {}, заполнителя {}", data_offset, filler_offset);
         let _ = join_handle_2.join().unwrap();
@@ -437,7 +438,7 @@ mod tests {
     Проверка, что статистика доходит до мейна
     */
     #[test]
-    #[serial]
+    //#[serial]
     fn stat_goes_to_main() {
         let TestStreams {
             mut vpn_stream,
@@ -473,7 +474,7 @@ mod tests {
        Проверяем что начиная с минимальной скорости мы достигаем максимальной скорости (1Gbit/s)
      */
     #[test]
-    #[serial]
+    //#[serial]
     fn one_gb_test() {
         initialize_logger();
         info!("1GB_TEST");
@@ -496,6 +497,8 @@ mod tests {
 
         let timeout = Duration::from_secs(5);
         let (tx, rx) = mpsc::channel();
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
         let join_handle_2 = thread::Builder::new()
             .name("send".to_string()).spawn(move || {
             let value_data: [u8; ONE_PACKET_MAX_SIZE] = [0; ONE_PACKET_MAX_SIZE];
@@ -503,8 +506,8 @@ mod tests {
             info!("---------Начали отправку");
             let start = Instant::now();
             //Забиваем таким количеством, которого должно хватить на пол секунды
-            while start.elapsed() < timeout {
-                let result = vpn_stream.write_all(&value_data[..]);
+            while start.elapsed() < timeout && r.load(Ordering::Relaxed) {
+                let result = vpn_stream.write(&value_data[..]);
                 if result.is_err() {
                     break;
                 }
@@ -538,6 +541,7 @@ mod tests {
                     let speed = delta / ms;
                     if speed >= target_speed {
                         info!("target speed: {speed} MBit/s");
+                        running.store(false, Ordering::Relaxed);
                         break;
                     }
                     let speed = to_regular_speed(speed);
@@ -549,6 +553,8 @@ mod tests {
             counter += 1;
         }
         assert!(start.elapsed() < timeout);
+        running.store(false, Ordering::Relaxed);
+        orchestrator.pairs.clear();
         let _ = join_handle_2.join().unwrap();
         join_handle.0.send(true).unwrap();
         join_handle.1.join().unwrap();

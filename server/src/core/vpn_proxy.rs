@@ -19,6 +19,7 @@ const BURNOUT_DELAY: Duration = Duration::from_millis(2);
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
     cr_state: Receiver<ProxyState>,
+    running: Arc<AtomicBool>,
     join_handle_stc: Option<JoinHandle<()>>,
     join_handle_cts: Option<JoinHandle<()>>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
@@ -85,6 +86,7 @@ impl VpnProxy {
         let join_handle_stc = ThreadWorkingSet::thread_start(thread_working_set);
         let mut down_read = pair.client_stream_read;
         let mut up_write = pair.up_stream_write;
+        let running2 = running.clone();
         let join_handle_cts = thread::Builder::new()
             .name(format!("{}-cts", key.clone()))
             .spawn(move || {
@@ -112,6 +114,7 @@ impl VpnProxy {
         Self {
             ct_command,
             cr_state,
+            running: running2,
             join_handle_stc: Some(join_handle_stc),
             join_handle_cts: Some(join_handle_cts),
             key: key.clone(),
@@ -120,6 +123,7 @@ impl VpnProxy {
 }
 impl Drop for VpnProxy {
     fn drop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
         if let Some(handle) = self.join_handle_stc.take() {
             if let Err(e) = handle.join() {
                 error!("Failed to join thread: {:?}", e);

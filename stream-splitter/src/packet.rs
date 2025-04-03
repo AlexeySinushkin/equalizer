@@ -61,10 +61,19 @@ pub fn write_packet(buf: &[u8], packet_type: u8,
     tmp_buf[..HEADER_SIZE].copy_from_slice(&head_buf);
     tmp_buf[HEADER_SIZE..total_size].copy_from_slice(buf);
 
-    // Send the full packet at once
-    stream
-        .write_all(&tmp_buf[..total_size])
-        .context("Write full packet in write_packet")?;
+    let mut sent = 0;
+    while sent < total_size {
+        let result = stream.write(&tmp_buf[sent..total_size]);
+        match result {
+            Ok(size) => sent += size,
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                // Данных пока нет, пробуем позже
+                sleep(Duration::from_millis(2));
+            },
+            Err(e) => bail!("Write full packet in write_packet: {:?}", e),
+        }
+    }
+
     Ok(())
 }
 
