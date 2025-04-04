@@ -12,7 +12,7 @@ use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, 
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
-use log::{debug};
+use log::{debug, trace};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -49,9 +49,9 @@ impl SpeedCorrector {
         let info = self.collected_info.get_mut(key).unwrap();
         let before_size = info.sent_data.len();
         let new_id = append_new_data(hp, info);
-        clear_old_data(info);
+        clear_old_data(info, LONG_TERM);
         let after_size = info.sent_data.len();
-        debug!("#{new_id} before_size: {}, after_size: {}", before_size, after_size);
+        trace!("#{new_id} before_size: {}, after_size: {}", before_size, after_size);
 
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             if let Some(log) = info.speed_logging.as_mut() {

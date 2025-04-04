@@ -4,6 +4,7 @@
 Поддерживается максимальный битрейт в течении 3-10 секунд, после чего
 идет медленное затухание
 */
+use std::collections::VecDeque;
 use crate::objects::{HotPotatoInfo, Packet, SentPacket, MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 use std::ops::{Sub};
 use std::time::{Duration, Instant};
@@ -54,7 +55,7 @@ impl SentPacketType {
 }
 
 pub struct Filler {
-    queue: Vec<SentPacketType>,
+    queue: VecDeque<SentPacketType>,
     //bytes per ms
     speed: usize,
 }
@@ -62,7 +63,7 @@ pub struct Filler {
 impl Filler {
 
     pub fn new(speed: usize) -> Filler {
-        let queue: Vec<SentPacketType> = Vec::new();
+        let queue: VecDeque<SentPacketType> = VecDeque::new();
         Self { queue, speed }
     }
 
@@ -71,11 +72,11 @@ impl Filler {
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
-        self.queue.push(SentPacketType::new_data(amount));
+        self.queue.push_back(SentPacketType::new_data(amount));
     }
 
     pub fn filler_was_sent(&mut self, amount: usize) {
-        self.queue.push(SentPacketType::new_filler(amount));
+        self.queue.push_back(SentPacketType::new_filler(amount));
     }
 
     pub fn clean_almost_full(&mut self) -> Option<HotPotatoInfo> {
@@ -110,9 +111,9 @@ impl Filler {
         let old_threshold = now.sub(OLD_AGE);
         let mut result = HotPotatoInfo::default();
 
-        while let Some(pack) = self.queue.first() {
+        while let Some(pack) = self.queue.front() {
             if pack.is_older(&old_threshold) {
-                let pack = self.queue.remove(0);
+                let pack = self.queue.pop_front().unwrap();
                 match pack.packet_type {
                     PacketType::Data => {
                         result.data_packets[result.data_count] = Some(pack.packet);

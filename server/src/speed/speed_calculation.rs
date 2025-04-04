@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use crate::speed::{SpeedForPeriod, TimeSpanSentDataInfo, PERCENT_100};
 use std::ops::Sub;
 use std::time::Duration;
-use log::debug;
+use log::{debug, trace};
 
 pub fn get_speed(
     max_duration: Duration,
@@ -39,7 +39,7 @@ pub fn get_speed(
         (0, 0)
     };
 
-    debug!("Mills {mills} amount {amount}. {}/{} #{} #{}", sent_data.len(), back.id-front_id, front_id, back.id);
+    trace!("Mills {mills} amount {amount}. {}/{} #{} #{}", sent_data.len(), back.id-front_id, front_id, back.id);
     if mills == 0 || amount == 0 {
         return None;
     }

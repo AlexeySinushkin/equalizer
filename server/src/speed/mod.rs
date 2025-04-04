@@ -18,13 +18,11 @@ pub const M_COND: usize = (1024 * 1024 / 10) / 1000;//TODO move
 pub const TO_MB: usize = 1024 * 1024; //TODO move
 pub const TO_KB: usize = 1024;
 const PERCENT_100: usize = 100;
-pub(crate) const LONG_TERM: Duration = Duration::from_secs(9);
+pub(crate) const LONG_TERM: Duration = Duration::from_secs(3);
 //меняем скорость не чаще этого периода
 pub(crate) const INCREASE_SPEED_PERIOD: Duration = Duration::from_millis(500);
-pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(10);
-//pub(crate) const HISTORY_HOLD_PERIOD: Duration = Duration::from_secs(11);
+pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(5);
 
-//TODO move
 /*
 Пересчитать байт/мс в Мбит/с
  */
@@ -85,7 +83,7 @@ struct Info {
 
 impl Info {
     pub fn new() -> Self {
-        let speed_logging = if log_enabled!(Level::Debug) {
+        let speed_logging = if log_enabled!(Level::Trace) {
             Some(SpeedLogging::new())
         } else { None };
         let mut info = Info::default();
@@ -104,8 +102,6 @@ struct SpeedLogging {
     start_time: Instant,
 }
 
-
-#[allow(dead_code)]
 struct TimeSpanSentDataInfo {
     id: u64,
     from: Instant,
