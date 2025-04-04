@@ -52,6 +52,7 @@ pub fn clear_old_data(info: &mut Info) {
     //удаляем данные старше 5 секунд
     let old_threshold = Instant::now() - LONG_TERM;
     while let Some(first) = info.sent_data.front() {
+        //FIXME Tests
         if first.from < old_threshold {
             let data = info.sent_data.pop_front().unwrap();
             if let Some(log) = info.speed_logging.as_mut() {

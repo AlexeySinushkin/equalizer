@@ -3,10 +3,10 @@ use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
-
+use std::fs::File;
 use entry::entry_point::start_listen;
 use log::LevelFilter;
-use simplelog::{Config, SimpleLogger};
+use simplelog::{ColorChoice, CombinedLogger, Config, SimpleLogger, TermLogger, TerminalMode, WriteLogger};
 
 use crate::orchestrator::Orchestrator;
 use crate::speed::{native_to_regular};
@@ -43,7 +43,22 @@ To run as service /absolute_path/equalizer 12010 1194 --service
     if service_mode {
         SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     }else{
-        SimpleLogger::init(LevelFilter::Debug, Config::default()).expect("Логгер проинициализирован");
+        // Initialize logging to both console and file
+        CombinedLogger::init(vec![
+            // Console logger with colors
+            TermLogger::new(
+                LevelFilter::Debug,  // Logs everything from Debug and above
+                Config::default(),
+                TerminalMode::Mixed, // Mixed mode: colored output when supported
+                ColorChoice::Auto    // Automatically select color mode
+            ),
+            // File logger
+            WriteLogger::new(
+                LevelFilter::Debug,   // Logs Info and above to the file
+                Config::default(),
+                File::create("app.log").unwrap(),
+            ),
+        ]).expect("Логгер проинициализирован");
     }
     let (ct_pair, cr_pair) = channel();
     let (_ct_stop, cr_stop) = channel();

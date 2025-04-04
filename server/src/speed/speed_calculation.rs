@@ -13,8 +13,9 @@ pub fn get_speed(
         debug!("A few data for speed calculation {}", sent_data.len());
         return None;
     }
-    let right = sent_data.back().unwrap().from;
-    let mut left = None;
+    let back = sent_data.back().unwrap();
+    let mut front = None;
+    let right = back.from;
     let from_threshold = right.sub(max_duration);
 
     let mut data_amount: usize = 0;
@@ -24,21 +25,22 @@ pub fn get_speed(
         if sent_data.from >= from_threshold && sent_data.from <= right {
             data_amount += sent_data.data_size;
             filler_amount += sent_data.filler_size;
-            if left == None {
-                left = Some(sent_data.from);
+            if front.is_none() {
+                front = Some(sent_data);
             }
         } else {
             break;
         }
     }
     let amount = data_amount + filler_amount;
-    let mills = if let Some(left) = left {
-        (right - left).as_millis() as usize
+    let (mills, front_id) = if let Some(front) = front {
+        ((right - front.from).as_millis() as usize, front.id)
     } else {
-        0
+        (0, 0)
     };
+
+    debug!("Mills {mills} amount {amount}. {}/{} #{} #{}", sent_data.len(), back.id-front_id, front_id, back.id);
     if mills == 0 || amount == 0 {
-        debug!("mills {mills} amount {amount}");
         return None;
     }
     Some(SpeedForPeriod {
