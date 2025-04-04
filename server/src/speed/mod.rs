@@ -21,7 +21,7 @@ const PERCENT_100: usize = 100;
 pub(crate) const LONG_TERM: Duration = Duration::from_secs(3);
 //меняем скорость не чаще этого периода
 pub(crate) const INCREASE_SPEED_PERIOD: Duration = Duration::from_millis(500);
-pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(5);
+pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(2);
 
 /*
 Пересчитать байт/мс в Мбит/с
@@ -75,7 +75,7 @@ struct Info {
     sent_data: VecDeque<TimeSpanSentDataInfo>,
     //последняя установленная скорость
     last_speed: Option<usize>,
-    last_command_date: Option<Instant>,
+    last_speed_change_date: Option<Instant>,
     sequence_data: u64,
     speed_logging: Option<SpeedLogging>,
 }

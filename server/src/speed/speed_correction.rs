@@ -53,31 +53,40 @@ impl SpeedCorrector {
         let after_size = info.sent_data.len();
         trace!("#{new_id} before_size: {}, after_size: {}", before_size, after_size);
 
+        let now = Instant::now();
+        let last_correction_date = info.last_speed_change_date;
+        let mut command = None;
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             if let Some(log) = info.speed_logging.as_mut() {
                 log.get_speed_log(LONG_TERM, &info.sent_data, &long_term_speed);
             }
-            let calculated_speed = long_term_speed.speed;
-            //trace!("calculated speed {calculated_speed}");
-            if calculated_speed < SHUTDOWN_SPEED {
-                return Self::switch_off_command(info);
-            }
-            let last_correction_date = info.last_command_date;
-            let now = Instant::now();
+            trace!("calculated speed {} {}%", long_term_speed.speed, long_term_speed.data_percent);
             if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent > UP_TRIGGER {
                     debug!("increase due percent {} #{new_id}", long_term_speed.data_percent);
-                    return Self::increase_command(&long_term_speed, info);
+                command = Self::increase_command(&long_term_speed, info);
             } else if last_correction_date.is_none_or(|time| time.add(DECREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent < DOWN_TRIGGER {
                 debug!("decrease due percent {} #{new_id}", long_term_speed.data_percent);
-                return Self::decrease_command(&long_term_speed, info);
+                command = Self::decrease_command(&long_term_speed);
             }
             //не удалось посчитать скорость, но мы ее уже ранее считали (большие задержки - отпускаем все)
         } else if info.last_speed.is_some() {
-            return Self::switch_off_command(info);
+            command = Self::switch_off_command(info);
         }
-        None
+
+        if let Some(command) = command {
+            match command {
+                SpeedCorrectorCommand::SwitchOff => {
+                    info.last_speed = None;
+                }
+                SpeedCorrectorCommand::SetSpeed(speed) => {
+                    info.last_speed = Some(speed);
+                    info.last_speed_change_date = Some(now);
+                }
+            }
+        }
+        command
     }
 
     pub fn clear_info(&mut self, key: &String) {
@@ -87,28 +96,27 @@ impl SpeedCorrector {
 
 
     //#[inline(never)]
-    fn switch_off_command(info: &mut Info) -> Option<SpeedCorrectorCommand> {
+    fn switch_off_command(info: &Info) -> Option<SpeedCorrectorCommand> {
         if info.last_speed.is_some() {
-            return Some(Self::append_speed_history_switch_off(info));
+            return Some(SpeedCorrectorCommand::SwitchOff);
         }
         None
     }
 
-    fn decrease_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
-        if current_speed.speed - DOWN_ACCELERATION < SHUTDOWN_SPEED{
-            return Self::switch_off_command(info);
+    fn decrease_command(current_speed: &SpeedForPeriod) -> Option<SpeedCorrectorCommand> {
+        let new_speed  = current_speed.speed as i32 - DOWN_ACCELERATION as i32;
+        if new_speed < SHUTDOWN_SPEED as i32 {
+            return Some(SpeedCorrectorCommand::SwitchOff)
         }
-        let new_speed  = current_speed.speed - DOWN_ACCELERATION;
-        Some(Self::append_speed_history(info, new_speed))
+        Some(SpeedCorrectorCommand::SetSpeed(new_speed as usize))
     }
-    fn increase_command(current_speed: &SpeedForPeriod, info: &mut Info) -> Option<SpeedCorrectorCommand> {
+    fn increase_command(current_speed: &SpeedForPeriod, info: &Info) -> Option<SpeedCorrectorCommand> {
         //предыдущая запрошенная скорость
         if let Some(prev_requested_speed) = info.last_speed {
             if current_speed.speed < Self::minus_7p(prev_requested_speed) {
                 debug!("Текущая скорость {} ниже запрошенной {prev_requested_speed}, (уперлись в пропускную способность)",
                         current_speed.speed);
-                Self::append_speed_history(info, prev_requested_speed);
-                return None;
+                return Some(SpeedCorrectorCommand::SetSpeed(prev_requested_speed));
             }
         }
         //новая увеличенная скорость основанная на данных за последние пол секунды
@@ -117,18 +125,7 @@ impl SpeedCorrector {
         }else {
             current_speed.speed + UP_ACCELERATION
         };
-        Some(Self::append_speed_history(info, new_speed))
-    }
-    fn append_speed_history(info: &mut Info, speed: usize) -> SpeedCorrectorCommand {
-        let command = SpeedCorrectorCommand::SetSpeed(speed);
-        info.last_speed = Some(speed);
-        info.last_command_date = Some(Instant::now());
-        command
-    }
-
-    fn append_speed_history_switch_off(info: &mut Info) -> SpeedCorrectorCommand {
-        info.last_speed = None;
-        SpeedCorrectorCommand::SwitchOff
+        Some(SpeedCorrectorCommand::SetSpeed(new_speed))
     }
 
     fn minus_7p(value: usize) -> usize{

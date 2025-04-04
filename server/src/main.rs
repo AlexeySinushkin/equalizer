@@ -54,7 +54,7 @@ To run as service /absolute_path/equalizer 12010 1194 --service
             ),
             // File logger
             WriteLogger::new(
-                LevelFilter::Debug,   // Logs Info and above to the file
+                LevelFilter::Trace,   // Logs Info and above to the file
                 Config::default(),
                 File::create("app.log").unwrap(),
             ),
