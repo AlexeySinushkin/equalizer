@@ -14,6 +14,7 @@ mod packets_logging;
 
 //скорость ниже которой мы отключаем филлер (не до жиру - быть бы живу)
 pub(crate) const SHUTDOWN_SPEED : usize = 150 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
+pub(crate) const ENABLE_SPEED : usize = 200 * 1024 / 1000;
 pub const M_COND: usize = (1024 * 1024 / 10) / 1000;//TODO move
 pub const TO_MB: usize = 1024 * 1024; //TODO move
 pub const TO_KB: usize = 1024;
@@ -70,12 +71,25 @@ struct SpeedForPeriod {
     speed: usize,
     data_percent: usize, //0-100
 }
+struct SpeedSetupParam {
+    command_time: Instant,
+    value: usize
+}
+
+impl SpeedSetupParam {
+    pub(crate) fn new(speed: usize, command_time: Instant) -> SpeedSetupParam {
+        Self {
+            value: speed,
+            command_time
+        }
+    }
+}
+
 #[derive(Default)]
 struct Info {
     sent_data: VecDeque<TimeSpanSentDataInfo>,
     //последняя установленная скорость
-    last_speed: Option<usize>,
-    last_speed_change_date: Option<Instant>,
+    last_speed_command: Option<SpeedSetupParam>,
     sequence_data: u64,
     speed_logging: Option<SpeedLogging>,
 }

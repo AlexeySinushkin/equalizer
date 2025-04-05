@@ -8,11 +8,11 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100};
+use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100, ENABLE_SPEED, SpeedSetupParam};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
-use log::{debug, trace};
+use log::{debug, info, trace};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -23,7 +23,7 @@ const FREE_PLAY: usize = 2;
 const DOWN_TRIGGER: usize = TARGET_PERCENT - FREE_PLAY;
 //Если процент полезных данных выше этого значения - увеличиваем скорость (скорость недостаточна для компенсации всплеска)
 const UP_TRIGGER: usize = TARGET_PERCENT + FREE_PLAY;
-const UP_ACCELERATION: usize = 100;
+const UP_ACCELERATION: usize = 70;
 const DOWN_ACCELERATION: usize = 50;
 
 
@@ -54,7 +54,12 @@ impl SpeedCorrector {
         trace!("#{new_id} before_size: {}, after_size: {}", before_size, after_size);
 
         let now = Instant::now();
-        let last_correction_date = info.last_speed_change_date;
+        let last_correction_date = if info.last_speed_command.is_some() {
+            let command_time = &info.last_speed_command.as_ref().unwrap().command_time;
+            Some(command_time)
+        }else{
+            None
+        };
         let mut command = None;
         if let Some(long_term_speed) = get_speed(LONG_TERM, &info.sent_data) {
             if let Some(log) = info.speed_logging.as_mut() {
@@ -71,18 +76,18 @@ impl SpeedCorrector {
                 command = Self::decrease_command(&long_term_speed);
             }
             //не удалось посчитать скорость, но мы ее уже ранее считали (большие задержки - отпускаем все)
-        } else if info.last_speed.is_some() {
+        } else if info.last_speed_command.is_none() {
+            info!("Недостаточно данных для анализа - отключаем");
             command = Self::switch_off_command(info);
         }
 
         if let Some(command) = command {
             match command {
                 SpeedCorrectorCommand::SwitchOff => {
-                    info.last_speed = None;
+                    info.last_speed_command = None;
                 }
                 SpeedCorrectorCommand::SetSpeed(speed) => {
-                    info.last_speed = Some(speed);
-                    info.last_speed_change_date = Some(now);
+                    info.last_speed_command = Some(SpeedSetupParam::new(speed, now));
                 }
             }
         }
@@ -97,7 +102,7 @@ impl SpeedCorrector {
 
     //#[inline(never)]
     fn switch_off_command(info: &Info) -> Option<SpeedCorrectorCommand> {
-        if info.last_speed.is_some() {
+        if info.last_speed_command.is_some() {
             return Some(SpeedCorrectorCommand::SwitchOff);
         }
         None
@@ -112,20 +117,19 @@ impl SpeedCorrector {
     }
     fn increase_command(current_speed: &SpeedForPeriod, info: &Info) -> Option<SpeedCorrectorCommand> {
         //предыдущая запрошенная скорость
-        if let Some(prev_requested_speed) = info.last_speed {
-            if current_speed.speed < Self::minus_7p(prev_requested_speed) {
-                debug!("Текущая скорость {} ниже запрошенной {prev_requested_speed}, (уперлись в пропускную способность)",
-                        current_speed.speed);
-                return Some(SpeedCorrectorCommand::SetSpeed(prev_requested_speed));
+        if let Some(prev_requested_command) = &info.last_speed_command {
+            if current_speed.speed < Self::minus_7p(prev_requested_command.value) {
+                debug!("Текущая скорость {} ниже запрошенной {}, (уперлись в пропускную способность)",
+                        current_speed.speed, prev_requested_command.value);
+                return None;
             }
         }
         //новая увеличенная скорость основанная на данных за последние пол секунды
-        let new_speed = if info.last_speed.is_none() {
-            SHUTDOWN_SPEED + UP_ACCELERATION
+        if info.last_speed_command.is_none() && current_speed.speed > ENABLE_SPEED {
+            Some(SpeedCorrectorCommand::SetSpeed(ENABLE_SPEED))
         }else {
-            current_speed.speed + UP_ACCELERATION
-        };
-        Some(SpeedCorrectorCommand::SetSpeed(new_speed))
+            Some(SpeedCorrectorCommand::SetSpeed(current_speed.speed + UP_ACCELERATION))
+        }
     }
 
     fn minus_7p(value: usize) -> usize{
@@ -212,12 +216,12 @@ mod tests {
             //корректировка каждые пол секунды только - 70*8=560ms
             let duration_ms = rng.random_range(8..15);
             let (total_bytes_for_period, proportion) = if i < 70 {
-                (high_speed * duration_ms, TARGET_PERCENT)
+                (high_speed * duration_ms, TARGET_PERCENT + FREE_PLAY*2)
             } else {
                 if i == 70 {
                     info!("------ Switching to low speed -------");
                 }
-                (low_speed * duration_ms, PERCENT_100 - FREE_PLAY)
+                (low_speed * duration_ms, TARGET_PERCENT - FREE_PLAY*2)
             };
             let duration = Duration::from_millis(duration_ms as u64);
             let parts: usize = rng.random_range(1..MAX_STAT_COUNT);
@@ -232,6 +236,9 @@ mod tests {
                 } else if let SpeedCorrectorCommand::SwitchOff = speed {
                     info!("------------ switch off -------------");
                     switch_off = true;
+                    if i>70 {
+                        break;
+                    }
                 }
             }
         }
@@ -241,6 +248,7 @@ mod tests {
         let m_bit_setup = to_regular_speed(speed_setup_request);
         info!("Bitrate was {m_bit_per_s} MBit/s, Requested speed {m_bit_setup}");
         info!("avg speed: {bytes_per_ms_sent} b/ms,  total_time: {total_time} ms, total_bytes: {total_sent_size}");
+        assert!(speed_setup_request>0);
         assert!(switch_off);
     }
 
