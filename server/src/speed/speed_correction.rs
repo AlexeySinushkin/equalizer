@@ -8,7 +8,7 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100, ENABLE_SPEED, SpeedSetupParam};
+use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100, ENABLE_SPEED, SpeedSetupParam, SWITCH_OFF_SPEED};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
@@ -105,11 +105,12 @@ impl SpeedCorrector {
 
 
     //#[inline(never)]
-    fn switch_off_command(info: &Info) -> Option<SpeedCorrectorCommand> {
-        if info.last_speed_command.is_some() {
+    fn switch_off_command(_info: &Info) -> Option<SpeedCorrectorCommand> {
+        /*if info.last_speed_command.is_some() {
             return Some(SpeedCorrectorCommand::SwitchOff);
         }
-        None
+        None*/
+        Some(SpeedCorrectorCommand::SetSpeed(SWITCH_OFF_SPEED))
     }
 
     fn decrease_command(current_speed: &SpeedForPeriod) -> Option<SpeedCorrectorCommand> {

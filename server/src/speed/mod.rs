@@ -12,6 +12,8 @@ mod packets_logging;
 //10 Мбит/с = 1МБ/с = 1048 байт/мс
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 
+//все время шлем данные, чтобы впн-у не пришлось свой keep-alive слать
+pub(crate) const SWITCH_OFF_SPEED : usize = 100 * 1024 / 1000;
 //скорость ниже которой мы отключаем филлер (не до жиру - быть бы живу)
 pub(crate) const SHUTDOWN_SPEED : usize = 150 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
 pub(crate) const ENABLE_SPEED : usize = 200 * 1024 / 1000;
