@@ -22,3 +22,4 @@ server/Cargo.lock
 server/stream-splitter
 obj/
 build/
+*.log

@@ -180,7 +180,6 @@ mod tests {
         let increment = ANALYZE_PERIOD / 10;
         for _i in 0..20 {
             let mut collected_info = HotPotatoInfo::default();
-            collected_info.target_speed = Some(INITIAL_SPEED);
             collected_info.data_count = 1;
             collected_info.filler_count = 1;
             collected_info.data_packets[0] = Some(SentPacket {
@@ -218,7 +217,6 @@ mod tests {
         let old_time = Instant::now().sub(ANALYZE_PERIOD / 2);
 
         let mut collected_info = HotPotatoInfo::default();
-        collected_info.target_speed = Some(INITIAL_SPEED);
         collected_info.data_count = 1;
         collected_info.filler_count = 0;
         collected_info.data_packets[0] = Some(SentPacket {
