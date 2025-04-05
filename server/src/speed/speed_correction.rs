@@ -53,7 +53,11 @@ impl SpeedCorrector {
         let after_size = info.sent_data.len();
         trace!("#{new_id} before_size: {}, after_size: {}", before_size, after_size);
 
-        let now = Instant::now();
+        let now = if let Some(back) = info.sent_data.back(){
+            back.from
+        }else{
+            Instant::now()
+        };
         let last_correction_date = if info.last_speed_command.is_some() {
             let command_time = &info.last_speed_command.as_ref().unwrap().command_time;
             Some(command_time)

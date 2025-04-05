@@ -49,12 +49,14 @@ impl SpeedLogging {
 
         let mut data_amount: usize = 0;
         let mut filler_amount: usize = 0;
-        let mut packets = String::from("");
+        let mut packets_data = String::from("");
+        let mut packets_filler = String::from("");
         for sent_data in sent_data.iter() {
             if sent_data.from >= from_threshold && sent_data.from < right {
                 let data = sent_data.data_size;
                 let filler = sent_data.filler_size;
-                packets.push_str(format!("{},{},", data, filler).as_str());
+                packets_data.push_str(format!("{},", data).as_str());
+                packets_filler.push_str(format!("{},", filler).as_str());
                 data_amount += data;
                 filler_amount += filler;
                 if left == None {
@@ -75,9 +77,10 @@ impl SpeedLogging {
         let speed = amount / mills;
         let data_percent = data_amount * PERCENT_100 / amount;
         writeln!(self.speed_file,
-        "---- {speed} ({}) from #{left_id} to #{right_id} amount {amount} mills {mills} percent {data_percent} ({})",
+        "---- {speed} ({}{}) from #{left_id} to #{right_id} amount:{amount} mills:{mills} percent {data_percent} {data_amount}+{filler_amount}",
                  calculated_speed.speed, calculated_speed.data_percent).unwrap();
-        writeln!(self.speed_file, "{}", packets).unwrap();
+        writeln!(self.speed_file, "{}", packets_data).unwrap();
+        writeln!(self.speed_file, "{}", packets_filler).unwrap();
     }
 
 }

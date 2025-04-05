@@ -1,4 +1,3 @@
-use std::cmp::{min};
 use std::time::{Instant, Duration};
 use log::{trace};
 use crate::objects::HotPotatoInfo;
@@ -6,16 +5,12 @@ use crate::speed::{Info, TimeSpanSentDataInfo};
 
 
 pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) -> u64 {
-    let now = Instant::now();
-    //самое раннее время отправки
-    let mut min_instant = now;
     let data_size: usize = match hp.data_count > 0 {
         true => {
             let mut result = 0;
             for i in 0..hp.data_count {
                 let sent_packet = hp.data_packets[i].unwrap();
                 result += sent_packet.sent_size;
-                min_instant = min(min_instant, sent_packet.sent_date);
             }
             result
         }
@@ -27,7 +22,6 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) -> u64 {
             for i in 0..hp.filler_count {
                 let sent_packet = hp.filler_packets[i].unwrap();
                 result += sent_packet.sent_size;
-                min_instant = min(min_instant, sent_packet.sent_date);
             }
             result
         }
@@ -36,7 +30,7 @@ pub fn append_new_data(hp: &HotPotatoInfo, info: &mut Info) -> u64 {
 
     let data = TimeSpanSentDataInfo {
         id: info.next_sequence_data(),
-        from: min_instant,
+        from: Instant::now(),
         data_size,
         filler_size,
     };
