@@ -11,9 +11,6 @@ impl VpnDataStream {
         vpn_data_stream
             .set_read_timeout(Some(READ_START_AWAIT_TIMEOUT))
             .expect("Архитектура подразумевает не блокирующий метод чтения");
-        vpn_data_stream
-            .set_nodelay(true)
-            .expect("Нет задержек отправки");
         Self {
             vpn_data_stream,
         }

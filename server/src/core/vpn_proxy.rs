@@ -159,7 +159,7 @@ impl ThreadWorkingSet {
         if let Ok(size) = self.down_read.read(&mut self.buf[..]) {
             if size > 0 {
                 //перенаправляем его VPN серверу
-                trace!("->> {}", size);
+                trace!("<<= {}", size);
                 self.up_write.write_all(&self.buf[..size])?;
                 some_work = true;
             }

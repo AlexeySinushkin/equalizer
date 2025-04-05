@@ -13,10 +13,10 @@ mod packets_logging;
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 
 //все время шлем данные, чтобы впн-у не пришлось свой keep-alive слать
-pub(crate) const SWITCH_OFF_SPEED : usize = 100 * 1024 / 1000;
+pub(crate) const SWITCH_OFF_SPEED : usize = 200 * 1024 / 1000;
 //скорость ниже которой мы отключаем филлер (не до жиру - быть бы живу)
-pub(crate) const SHUTDOWN_SPEED : usize = 150 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
-pub(crate) const ENABLE_SPEED : usize = 200 * 1024 / 1000;
+pub(crate) const SHUTDOWN_SPEED : usize = 210 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
+pub(crate) const ENABLE_SPEED : usize = 250 * 1024 / 1000;
 pub const M_COND: usize = (1024 * 1024 / 10) / 1000;//TODO move
 pub const TO_MB: usize = 1024 * 1024; //TODO move
 pub const TO_KB: usize = 1024;
