@@ -1,26 +1,31 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::fs::File;
+use std::io::BufWriter;
 use std::time::Instant;
 use std::time::Duration;
+use log::{log_enabled, Level};
 
 pub mod speed_correction;
 mod modify_collected_info;
 mod speed_calculation;
-
+mod packets_logging;
 //10 Мбит/с = 1МБ/с = 1048 байт/мс
 //pub const INITIAL_SPEED: usize = 1*1024*1024/1000;
 
+//все время шлем данные, чтобы впн-у не пришлось свой keep-alive слать
+pub(crate) const SWITCH_OFF_SPEED : usize = 200 * 1024 / 1000;
 //скорость ниже которой мы отключаем филлер (не до жиру - быть бы живу)
-pub(crate) const SHUTDOWN_SPEED : usize = 300 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
+pub(crate) const SHUTDOWN_SPEED : usize = 210 * 1024 / 1000;//Убрать ссылки, инициализировать объекты по-требованию
+pub(crate) const ENABLE_SPEED : usize = 250 * 1024 / 1000;
 pub const M_COND: usize = (1024 * 1024 / 10) / 1000;//TODO move
 pub const TO_MB: usize = 1024 * 1024; //TODO move
 pub const TO_KB: usize = 1024;
 const PERCENT_100: usize = 100;
-pub(crate) const LONG_TERM: Duration = Duration::from_secs(5);
-pub(crate) const SHORT_TERM: Duration = Duration::from_secs(2);
+pub(crate) const LONG_TERM: Duration = Duration::from_secs(3);
 //меняем скорость не чаще этого периода
-pub(crate) const MODIFY_PERIOD: Duration = Duration::from_millis(500);
+pub(crate) const INCREASE_SPEED_PERIOD: Duration = Duration::from_millis(500);
+pub(crate) const DECREASE_SPEED_PERIOD: Duration = Duration::from_secs(2);
 
-//TODO move
 /*
 Пересчитать байт/мс в Мбит/с
  */
@@ -68,21 +73,54 @@ struct SpeedForPeriod {
     speed: usize,
     data_percent: usize, //0-100
 }
-#[derive(Default)]
-struct Info {
-    sent_data: Vec<TimeSpanSentDataInfo>,
-    speed_setup: Vec<SetupSpeedHistory>,
+struct SpeedSetupParam {
+    command_time: Instant,
+    value: usize
 }
 
-struct SetupSpeedHistory {
-    setup_time: Instant,
-    command: SpeedCorrectorCommand,
+impl SpeedSetupParam {
+    pub(crate) fn new(speed: usize, command_time: Instant) -> SpeedSetupParam {
+        Self {
+            value: speed,
+            command_time
+        }
+    }
 }
-#[allow(dead_code)]
+
+#[derive(Default)]
+struct Info {
+    sent_data: VecDeque<TimeSpanSentDataInfo>,
+    //последняя установленная скорость
+    last_speed_command: Option<SpeedSetupParam>,
+    sequence_data: u64,
+    speed_logging: Option<SpeedLogging>,
+}
+
+
+impl Info {
+    pub fn new() -> Self {
+        let speed_logging = if log_enabled!(Level::Trace) {
+            Some(SpeedLogging::new())
+        } else { None };
+        let mut info = Info::default();
+        info.speed_logging = speed_logging;
+        info
+    }
+    fn next_sequence_data(&mut self) -> u64 {
+        self.sequence_data += 1;
+        self.sequence_data
+    }
+}
+
+struct SpeedLogging {
+    packets_file: BufWriter<File>,
+    speed_file: BufWriter<File>,
+    start_time: Instant,
+}
+
 struct TimeSpanSentDataInfo {
+    id: u64,
     from: Instant,
-    time_span: Duration,
-    target_speed: Option<usize>,
     data_size: usize,
     filler_size: usize,
 }

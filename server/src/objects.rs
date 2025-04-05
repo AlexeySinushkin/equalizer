@@ -46,8 +46,6 @@ pub struct Pair {
 Должны быть быстро куда-нибудь переданы или агрегированы
  */
 pub struct HotPotatoInfo {
-    //такую скорость надо было поддерживать в момент отправки пакетов
-    pub target_speed: Option<usize>,
     pub data_packets: [Option<SentPacket>; MAX_STAT_COUNT],
     pub data_count: usize,
     pub filler_packets: [Option<SentPacket>; MAX_STAT_COUNT],
@@ -57,7 +55,6 @@ pub struct HotPotatoInfo {
 impl Default for HotPotatoInfo {
     fn default() -> HotPotatoInfo {
         HotPotatoInfo {
-            target_speed: None,
             data_count: 0,
             filler_count: 0,
             data_packets: [None; MAX_STAT_COUNT],

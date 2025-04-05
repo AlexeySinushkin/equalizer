@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::core::filler::Filler;
 use crate::objects::Pair;
 use crate::objects::ONE_PACKET_MAX_SIZE;
@@ -16,7 +18,8 @@ const BURNOUT_DELAY: Duration = Duration::from_micros(500);
 pub struct VpnProxy {
     ct_command: Sender<RuntimeCommand>,
     cr_state: Receiver<ProxyState>,
-    join_handle: JoinHandle<()>,
+    running: Arc<AtomicBool>,
+    join_handle: Option<JoinHandle<()>>,
     //подразумеваем что от одного VPN клиента может устанавливаться только одно подключение
     //будем использовать IP tun интерфейса
     pub key: String,
@@ -48,6 +51,7 @@ struct ThreadWorkingSet {
     cr_command: Receiver<RuntimeCommand>,
     ct_state: Sender<ProxyState>,
     pair: Pair,
+    running: Arc<AtomicBool>,
     //without throttler & filler
     free_mode: bool,
     //временный буфер
@@ -59,11 +63,12 @@ impl VpnProxy {
         let (ct_command, cr_command) = channel();
         let (ct_state, cr_state) = channel();
         let key = pair.key.clone();
-
+        let running = Arc::new(AtomicBool::new(true));
         let thread_working_set = ThreadWorkingSet {
             key: key.clone(),
             cr_command,
             ct_state: ct_state.clone(),
+            running: running.clone(),
             free_mode: true,
             pair,
             buf: [0; ONE_PACKET_MAX_SIZE],
@@ -75,20 +80,24 @@ impl VpnProxy {
         Self {
             ct_command,
             cr_state,
-            join_handle,
+            running,
+            join_handle: Some(join_handle),
             key: key.clone(),
         }
     }
 }
+
 impl Drop for VpnProxy {
     fn drop(&mut self) {
-        info!("Dropping VpnProxy. Thread {}. Finished: {}. {:?}",
-            self.join_handle.thread().name().unwrap(),
-            self.join_handle.is_finished(),
-            self.join_handle.thread().id());
+        self.running.store(false, Ordering::Relaxed);
+        if let Some(handle) = self.join_handle.take() {
+            if let Err(e) = handle.join() {
+                error!("Failed to join thread: {:?}", e);
+            }
+        }
+        info!("Dropping VpnProxy. Thread {}.",self.key);
     }
 }
-
 
 impl ThreadWorkingSet {
     pub fn thread_start(mut instance: ThreadWorkingSet) -> JoinHandle<()> {
@@ -100,6 +109,12 @@ impl ThreadWorkingSet {
                 instance.ct_state.send(ProxyState::SetupComplete).unwrap();
                 info!("Client thread started");
                 loop {
+                    if !instance.running.load(Ordering::Relaxed) {
+                        instance.ct_state.send(ProxyState::Broken).unwrap();
+                        let _ = instance.pair.client_stream.shutdown();
+                        let _ = instance.pair.up_stream.shutdown();
+                        break;
+                    }
                     let result = if instance.free_mode {
                         instance.free_loop(&mut filler)
                     } else {
@@ -107,7 +122,8 @@ impl ThreadWorkingSet {
                     };
                     match result {
                         Err(e) => {
-                            error!("{} {}", e.ctx, e.location);
+                            instance.running.store(false, Ordering::Relaxed);
+                            error!("{:?} {} {}", e.cause, e.ctx, e.location);
                             let _ = instance.ct_state.send(ProxyState::Broken);
                             let _ = instance.pair.client_stream.shutdown();
                             let _ = instance.pair.up_stream.shutdown();

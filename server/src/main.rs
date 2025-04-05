@@ -3,10 +3,10 @@ use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
-
+use std::fs::File;
 use entry::entry_point::start_listen;
 use log::LevelFilter;
-use simplelog::{Config, SimpleLogger};
+use simplelog::{ColorChoice, CombinedLogger, Config, SimpleLogger, TermLogger, TerminalMode, WriteLogger};
 
 use crate::orchestrator::Orchestrator;
 use crate::speed::{native_to_regular};
@@ -22,7 +22,6 @@ mod statistic;
 mod c_client_tests;
 
 fn main() {
-    SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         println!("Example usage: ./equalizer 12010 1194");
@@ -40,7 +39,26 @@ To run as service /absolute_path/equalizer 12010 1194 --service
     let proxy_listen_port: u16 = *&args.get(1).unwrap().parse().unwrap();
     let vpn_listen_port: u16 = *&args.get(2).unwrap().parse().unwrap();
     let service_mode: bool = args.len() > 3 && args.get(3).unwrap().eq("--service"); //TODO to use some lib
-
+    if service_mode {
+        SimpleLogger::init(LevelFilter::Info, Config::default()).expect("Логгер проинициализирован");
+    }else {
+        // Initialize logging to both console and file
+        CombinedLogger::init(vec![
+            // Console logger with colors
+            TermLogger::new(
+                LevelFilter::Debug,  // Logs everything from Debug and above
+                Config::default(),
+                TerminalMode::Mixed, // Mixed mode: colored output when supported
+                ColorChoice::Auto    // Automatically select color mode
+            ),
+            // File logger
+            WriteLogger::new(
+                LevelFilter::Trace,   // Logs Info and above to the file
+                Config::default(),
+                File::create("app.log").unwrap(),
+            ),
+        ]).expect("Логгер проинициализирован");
+    }
     let (ct_pair, cr_pair) = channel();
     let (_ct_stop, cr_stop) = channel();
     let join = start_listen(proxy_listen_port, vpn_listen_port, ct_pair, cr_stop).unwrap();
