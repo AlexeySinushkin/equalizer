@@ -12,7 +12,7 @@ use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, 
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
-use log::{debug, info, trace};
+use log::{debug, trace};
 
 const TARGET_PERCENT: usize = 80;
 //для быстрого отключения филлера при слабом канале
@@ -81,7 +81,7 @@ impl SpeedCorrector {
             }
             //не удалось посчитать скорость, но мы ее уже ранее считали (большие задержки - отпускаем все)
         } else if info.last_speed_command.is_none() {
-            info!("Недостаточно данных для анализа - отключаем");
+            debug!("Недостаточно данных для анализа - отключаем");
             command = Self::switch_off_command(info);
         }
 
@@ -156,7 +156,7 @@ mod tests {
 
     /**
     Отправляем полезных данных со скоростью 50MBit/s
-    Убеждаемся что нам устанавливают скорость 60 (50 на данные, 10 на заполнитель)
+    Убеждаемся что нам устанавливают скорость 51 (50 на данные, 1 на заполнитель)
      */
     #[test]
     fn increase_speed_limit_test() {
@@ -191,8 +191,8 @@ mod tests {
         let total_time = Instant::now().duration_since(start).as_millis();
         let bytes_per_ms_sent = total_sent_size / total_time as usize;
         info!("avg speed: {bytes_per_ms_sent} b/ms,  total_time: {total_time} ms, total_bytes: {total_sent_size}");
-        let expected_speed_from = to_native_speed(51);
-        let expected_speed_to = to_native_speed(60);
+        let expected_speed_from = to_native_speed(47);
+        let expected_speed_to = to_native_speed(52);
         info!("requested_speed: {speed_setup_request}, expected from: {expected_speed_from} to: {expected_speed_to}");
         assert!(speed_setup_request > expected_speed_from);
         assert!(speed_setup_request < expected_speed_to);

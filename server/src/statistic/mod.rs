@@ -160,7 +160,6 @@ impl StatisticCollector for SimpleStatisticCollector {
 #[cfg(test)]
 mod tests {
     use crate::objects::{HotPotatoInfo, SentPacket};
-    pub const INITIAL_SPEED: usize = 1024 * 1024 / 1000;
     use crate::statistic::{SimpleStatisticCollector, StatisticCollector, ANALYZE_PERIOD};
     use log::info;
     use std::ops::{Add, Sub};
