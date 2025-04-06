@@ -8,7 +8,7 @@ SHORT_TERM - для целей повышения скорости - TODO
 use crate::objects::HotPotatoInfo;
 use crate::speed::modify_collected_info::{append_new_data, clear_old_data};
 use crate::speed::speed_calculation::get_speed;
-use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100, ENABLE_SPEED, SpeedSetupParam};
+use crate::speed::{Info, SpeedCorrector, SpeedCorrectorCommand, SpeedForPeriod, LONG_TERM, INCREASE_SPEED_PERIOD, SHUTDOWN_SPEED, DECREASE_SPEED_PERIOD, PERCENT_100, ENABLE_SPEED, SpeedSetupParam, SHORT_TERM};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Instant};
@@ -69,8 +69,16 @@ impl SpeedCorrector {
             if let Some(log) = info.speed_logging.as_mut() {
                 log.get_speed_log(LONG_TERM, &info.sent_data, &long_term_speed);
             }
-            trace!("calculated speed {} {}%", long_term_speed.speed, long_term_speed.data_percent);
-            if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < now)
+
+            trace!("calculated speed {} {}%",
+                long_term_speed.speed, long_term_speed.data_percent);
+
+            // просмотр рилсов - 5-20 секунд простоя, потом резкое переключение на следующий.
+            // - надо резко отреагировать на возросший спрос
+            let short_term_speed = get_speed(SHORT_TERM, &info.sent_data);
+            if info.last_speed_command.is_none() && short_term_speed?.data_percent > UP_TRIGGER {
+                command = Some(SpeedCorrectorCommand::SetSpeed(ENABLE_SPEED+UP_ACCELERATION));
+            } else if last_correction_date.is_none_or(|time| time.add(INCREASE_SPEED_PERIOD) < now)
                 && long_term_speed.data_percent > UP_TRIGGER {
                     debug!("increase due percent {} #{new_id}", long_term_speed.data_percent);
                 command = Self::increase_command(&long_term_speed, info);
@@ -80,7 +88,7 @@ impl SpeedCorrector {
                 command = Self::decrease_command(&long_term_speed);
             }
             //не удалось посчитать скорость, но мы ее уже ранее считали (большие задержки - отпускаем все)
-        } else if info.last_speed_command.is_none() {
+        } else if info.last_speed_command.is_some() {
             debug!("Недостаточно данных для анализа - отключаем");
             command = Self::switch_off_command(info);
         }
@@ -128,10 +136,11 @@ impl SpeedCorrector {
                 return None;
             }
         }
-        //новая увеличенная скорость основанная на данных за последние пол секунды
+
         if info.last_speed_command.is_none() && current_speed.speed > ENABLE_SPEED {
-            Some(SpeedCorrectorCommand::SetSpeed(ENABLE_SPEED))
+            Some(SpeedCorrectorCommand::SetSpeed(ENABLE_SPEED+UP_ACCELERATION))
         }else {
+            //новая увеличенная скорость основанная на данных за последние 3 секунды
             Some(SpeedCorrectorCommand::SetSpeed(current_speed.speed + UP_ACCELERATION))
         }
     }
