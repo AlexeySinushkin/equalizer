@@ -4,12 +4,11 @@
 Поддерживается максимальный битрейт в течении 3-10 секунд, после чего
 идет медленное затухание
 */
-use std::collections::VecDeque;
 use crate::objects::{HotPotatoInfo, Packet, SentPacket, MAX_STAT_COUNT, ONE_PACKET_MAX_SIZE};
 use std::ops::{Sub};
 use std::time::{Duration, Instant};
 const ANALYZE_PERIOD_MS: u64 = 100;
-const MIN_BYTES_TO_FILL:usize = 1024;
+const MIN_BYTES_TO_FILL:usize = ONE_PACKET_MAX_SIZE/4;
 const OLD_AGE: Duration = Duration::from_millis(ANALYZE_PERIOD_MS);
 enum PacketType {
     Data,
@@ -49,13 +48,13 @@ impl SentPacketType {
     }
 
     //моложе - был создан позже этого времени
-    fn is_younger(&self, time: &Instant) -> bool {
+    fn _is_younger(&self, time: &Instant) -> bool {
         return &self.packet.sent_date > time;
     }
 }
 
 pub struct Filler {
-    queue: VecDeque<SentPacketType>,
+    queue: Vec<SentPacketType>,
     //bytes per ms
     speed: usize,
 }
@@ -63,7 +62,7 @@ pub struct Filler {
 impl Filler {
 
     pub fn new(speed: usize) -> Filler {
-        let queue: VecDeque<SentPacketType> = VecDeque::new();
+        let queue: Vec<SentPacketType> = Vec::new();
         Self { queue, speed }
     }
 
@@ -72,11 +71,11 @@ impl Filler {
     }
 
     pub fn data_was_sent(&mut self, amount: usize) {
-        self.queue.push_back(SentPacketType::new_data(amount));
+        self.queue.push(SentPacketType::new_data(amount));
     }
 
     pub fn filler_was_sent(&mut self, amount: usize) {
-        self.queue.push_back(SentPacketType::new_filler(amount));
+        self.queue.push(SentPacketType::new_filler(amount));
     }
 
     pub fn clean_almost_full(&mut self) -> Option<HotPotatoInfo> {
@@ -111,9 +110,9 @@ impl Filler {
         let old_threshold = now.sub(OLD_AGE);
         let mut result = HotPotatoInfo::default();
 
-        while let Some(pack) = self.queue.front() {
+        while let Some(pack) = self.queue.first() {
             if pack.is_older(&old_threshold) {
-                let pack = self.queue.pop_front().unwrap();
+                let pack = self.queue.remove(0);
                 match pack.packet_type {
                     PacketType::Data => {
                         result.data_packets[result.data_count] = Some(pack.packet);
@@ -134,52 +133,39 @@ impl Filler {
         result
     }
 
-    /**
-    подсчитываем сколько отправили за последние ~100ms
-    если количество отправленных данных меньше того, которое могли бы отправить на текущей скорости
-    возвращаем количество для заполнения
-    */
     pub fn get_available_space(&self) -> usize {
-        let right = Instant::now();
-        let old_threshold = Instant::now().sub(OLD_AGE);
-        let mut left = None;
-        let mut data_count : i32 = 0;
-        for pack in &self.queue {
-            if pack.is_younger(&old_threshold) {
-                if left.is_none() {
-                    left = Some(pack.packet.sent_date);
-                }
-                data_count += pack.packet.sent_size as i32;
-            }
+        if let Some(last) = self.queue.last() {
+            return self.get_space(&last.packet);
         }
-        if let Some(left) = left {
-            let duration = (right - left).as_millis() as i32;
-            // S = V*t
-            let data_capacity = self.speed as i32 * duration;
-            let delta: i32 = data_capacity - data_count;
-            if delta > 0 {
-                if delta > ONE_PACKET_MAX_SIZE as i32 {
-                    return ONE_PACKET_MAX_SIZE;
-                }
-                return delta as usize;
-            }
-        }
-        0
+        ONE_PACKET_MAX_SIZE
     }
-
     /*
         Подсчитываем сколько надо доотправить для поддержания скорости
         S = v*t, S = количество байт
      */
     pub fn get_filler_packet(&self) -> Option<Packet> {
-        let bytes_to_fill = self.get_available_space();
-        if bytes_to_fill > MIN_BYTES_TO_FILL {
-            //не отправляем большие пакеты заполнителя - не забиваем канал
-            return Some(Packet::new_packet(bytes_to_fill/2));
+        if let Some(last) = self.queue.last() {
+            let last = last.packet;
+            let bytes_to_fill = self.get_space(&last);
+            if bytes_to_fill > MIN_BYTES_TO_FILL {
+                if bytes_to_fill > ONE_PACKET_MAX_SIZE {
+                    return Some(Packet::new_packet(ONE_PACKET_MAX_SIZE));
+                }
+                return Some(Packet::new_packet(bytes_to_fill));
+            }
         }
         None
     }
 
+    fn get_space(&self, from_packet: &SentPacket) -> usize {
+        let duration_to_now = Instant::now().sub(from_packet.sent_date);
+        let duration_sent = Duration::from_millis((from_packet.sent_size / self.speed) as u64);
+        if duration_to_now > duration_sent {
+            let delta_ms = duration_to_now.sub(duration_sent).as_millis() as usize;
+            return self.speed * delta_ms;
+        }
+        0
+    }
 
 }
 
@@ -195,16 +181,14 @@ mod tests {
     pub const INITIAL_SPEED: usize = 1024 * 1024 / 1000;
 
     #[test]
-    #[inline(never)]
     fn filler_test() {
         initialize_logger();
         let mut filler = Filler::new(INITIAL_SPEED);
-        filler.data_was_sent(100);
+        filler.data_was_sent(1);
         sleep(Duration::from_millis(5));
         let fill_packet = filler.get_filler_packet();
-        let from = 2 * INITIAL_SPEED;
-        let to = 3 * INITIAL_SPEED;
-        //assert!(fill_packet.is_some());
+        let from = 4 * INITIAL_SPEED;
+        let to = 6 * INITIAL_SPEED;
         let size = fill_packet.unwrap().size;
         info!("{from} < {size} < {to}");
         assert!(size > from && size < to);
